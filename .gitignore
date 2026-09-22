@@ -38,6 +38,8 @@
 *.exe
 *.out
 *.app
+run_tests
+thermo_sph*
 
 # Build directories
 build/
@@ -67,3 +69,4 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+

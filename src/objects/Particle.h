@@ -1,5 +1,8 @@
 #pragma once
 #include "Vector2D.h"
+#include "IBoundary.h"
+#include <memory>
+#include <vector>
 
 
 enum class MotionType
@@ -23,6 +26,10 @@ public:
     double u = 0.0; //specific internal energy
     double dudt = 0.0; // rate of change of internal energy
 
+protected:
+    std::unique_ptr<IBoundary> boundaryComponent_ = nullptr;
+public:
+
     Particle(int id, Vector2D pos, Vector2D vel, double m, double r, double u)
         : id(id), pos(pos), vel(vel), accel(0.0,0.0),
           mass(m), density(r), u(u) {}
@@ -39,56 +46,48 @@ public:
     bool isStatic() const { return getMotionType() == MotionType::STATIC; }
     bool isNonStatic() const { return getMotionType() == MotionType::NONSTATIC; }
     bool isDynamic() const { return getMotionType() == MotionType::DYNAMIC; }
+
+    void setBoundaryComponent(std::unique_ptr<IBoundary> boundary) {
+        boundaryComponent_ = std::move(boundary);
+    }
+
+    bool hasBoundary() const { 
+        return boundaryComponent_ != nullptr; 
+    }
+
+    std::vector<std::unique_ptr<Particle>> generateGhosts(
+        const std::vector<std::unique_ptr<Particle>>& fluidParticles, 
+        double supportRadius) const 
+    {
+        if (!boundaryComponent_) return {};
+        return boundaryComponent_->generateGhosts(pos, vel, u, fluidParticles, supportRadius);
+    }
 };
 
-class StaticParticle : public Particle 
+class FluidParticle : public Particle 
 {
 public:
     using Particle::Particle;
 
+    bool isFluid() const override { return true; }
+    MotionType getMotionType() const override { return MotionType::DYNAMIC; }
+};
+
+class SolidParticle : public Particle 
+{
+private:
+    MotionType motionType_;
+
+public:
+    SolidParticle(int id, Vector2D pos, Vector2D vel, double m, double r, double u, MotionType type = MotionType::STATIC)
+        : Particle(id, pos, vel, m, r, u), motionType_(type) {}
+
+    bool isFluid() const override { return false; }
+    MotionType getMotionType() const override { return motionType_; }
+    void setMotionType(MotionType type) { motionType_ = type; }
+
     void kickHalf(double) override {}
     void drift(double) override {}
-
-    MotionType getMotionType() const override { return MotionType::STATIC; }
-};
-
-class NonStaticParticle : public Particle {
-protected:
-    Vector2D prescribedVel_;
-
-public:
-    NonStaticParticle(int id, Vector2D pos, Vector2D prescribedVel, double mass, double density, double u)
-        : Particle(id, pos, prescribedVel, mass, density, u), prescribedVel_(prescribedVel) {}
-
-    void setPrescribedVelocity(Vector2D v) { 
-        prescribedVel_ = v; 
-        vel = v; 
-    }
-
-    void kickHalf(double) override {}
-
-    void drift(double dt) override {
-        pos += prescribedVel_ * dt;
-    }
-
-    MotionType getMotionType() const override { return MotionType::NONSTATIC; }
-};
-
-class DynamicParticle : public Particle {
-public:
-    using Particle::Particle;
-
-    void kickHalf(double dt) override {
-        vel += accel * (0.5 * dt);
-        u += dudt * (0.5 * dt);
-        if (u < 1e-4) u = 1e-4; 
-    }
-
-    void drift(double dt) override {
-        pos += vel * dt;
-    }
-
-    MotionType getMotionType() const override { return MotionType::DYNAMIC; }
 };
 
 

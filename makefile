@@ -11,7 +11,8 @@ BUILD_DIR := build
 
 INCLUDES  := -I $(SRC_DIR) \
              -I $(SRC_DIR)/objects \
-             -I $(SRC_DIR)/phys
+             -I $(SRC_DIR)/phys \
+             -I $(TEST_DIR)
 
 ALL_SRCS  := $(shell find $(SRC_DIR) -type f -name "*.cpp")
 LIB_SRCS  := $(filter-out $(SRC_DIR)/main.cpp, $(ALL_SRCS))

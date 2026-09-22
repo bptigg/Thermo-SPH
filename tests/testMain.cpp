@@ -1,4 +1,4 @@
-#include "TestSuite.h"
+#include "testSuite.h"
 #include "test_Vector2D.h"
 #include "test_RigidBody.h"
 

@@ -1,4 +1,4 @@
 #pragma once
-#include "TestSuite.h"
+#include "testSuite.h"
 
 void registerRigidBodyTests(TestSuite& suite);

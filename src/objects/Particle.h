@@ -62,6 +62,22 @@ public:
         if (!boundaryComponent_) return {};
         return boundaryComponent_->generateGhosts(pos, vel, u, fluidParticles, supportRadius);
     }
+
+    Vector2D getMomentum() const { 
+        return vel * mass; 
+    }
+
+    double getKineticEnergy() const { 
+        return 0.5 * mass * vel.normSq(); 
+    }
+
+    double getInternalEnergy() const { 
+        return mass * u; 
+    }
+
+    double getTotalEnergy() const { 
+        return getKineticEnergy() + getInternalEnergy(); 
+    }
 };
 
 class FluidParticle : public Particle 
@@ -69,8 +85,20 @@ class FluidParticle : public Particle
 public:
     using Particle::Particle;
 
-    bool isFluid() const override { return true; }
+    void kickHalf(double dt) override {
+        if (!isDynamic()) return;
+        vel += accel * (0.5 * dt);
+        u   += dudt  * (0.5 * dt);
+        if (u < 1e-5) u = 1e-5;
+    }
+
+    void drift(double dt) override {
+        if (!isDynamic()) return;
+        pos += vel * dt;
+    }
+
     MotionType getMotionType() const override { return MotionType::DYNAMIC; }
+    bool isFluid() const override { return true; }
 };
 
 class SolidParticle : public Particle 

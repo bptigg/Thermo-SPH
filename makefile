@@ -12,6 +12,9 @@ BUILD_DIR := build
 INCLUDES  := -I $(SRC_DIR) \
              -I $(SRC_DIR)/objects \
              -I $(SRC_DIR)/phys \
+			 -I $(SRC_DIR)/phys/Boundaries \
+			 -I $(SRC_DIR)/phys/Integrator \
+			 -I $(SRC_DIR)/utility \
              -I $(TEST_DIR)
 
 ALL_SRCS  := $(shell find $(SRC_DIR) -type f -name "*.cpp")

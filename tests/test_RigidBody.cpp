@@ -12,16 +12,16 @@ static std::shared_ptr<SolidParticle> createParticle(int id, Vector2D pos, doubl
 static bool testFinalizeInitialization() {
     RigidObject obj;
     auto p1 = createParticle(1, Vector2D(0.0, 0.0), 2.0);
-    auto p2 = createParticle(2, Vector2D(2.0, 0.0), 2.0);
+    auto p2 = createParticle(2, Vector2D(3.0, 0.0), 2.0);
 
     obj.addParticle(p1);
     obj.addParticle(p2);
     obj.finalizeInitialization();
 
     TEST_ASSERT_NEAR(obj.getTotalMass(), 4.0, 1e-6, "Total mass calculation failed");
-    TEST_ASSERT_NEAR(obj.getCenterOfMass().x, 1.0, 1e-6, "Center of Mass X failed");
+    TEST_ASSERT_NEAR(obj.getCenterOfMass().x, 1.5, 1e-6, "Center of Mass X failed");
     TEST_ASSERT_NEAR(obj.getCenterOfMass().y, 0.0, 1e-6, "Center of Mass Y failed");
-    TEST_ASSERT_NEAR(obj.getInertia(), 4.0, 1e-6, "Moment of Inertia calculation failed");
+    TEST_ASSERT_NEAR(obj.getInertia(), 9.0, 1e-6, "Moment of Inertia calculation failed");
 
     return true;
 }

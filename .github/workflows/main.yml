@@ -8,13 +8,13 @@ jobs:
   sync-job:
     runs_on: ubuntu-latest
     steps:
-      -name: Checkout Code
-       uses: actions/checkout@v4
-       with:
-         fetch_depth: 0
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch_depth: 0
       
-      -name: Mirroring Branch
-       uses: codyde/branch-mirroring-action@v10
-       with:
-         target_repo_url: "https://oauth2:${{ secrets.GITLAB_TOKEN }}@://gitlab.com"
-         source_branch_id: "main"
+      - name: Mirroring Branch
+        uses: codyde/branch-mirroring-action@v10
+        with:
+          target_repo_url: "https://oauth2:${{ secrets.GITLAB_TOKEN }}@://gitlab.com"
+          source_branch_id: "main"

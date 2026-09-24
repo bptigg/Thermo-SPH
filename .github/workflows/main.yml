@@ -16,5 +16,5 @@ jobs:
       - name: Mirroring Branch
         uses: codyde/branch-mirroring-action@v10
         with:
-          target_repo_url: "https://oauth2:${{ secrets.GITLAB_TOKEN }}@gitlab.com"
+          target_repo_url: "https://oauth2:${{ secrets.GITLAB_TOKEN }}@gitlab.uni-oldenburg.de"
           source_branch_id: "main"

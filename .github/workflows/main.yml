@@ -1,0 +1,13 @@
+- name: Mirroring Branch
+  # You may pin to the exact commit or the version.
+  # uses: codyde/branch-mirroring-action@4e3587b7e71525d7701e7bc75b220adada28213e
+  uses: codyde/branch-mirroring-action@v10
+  with:
+    # SSH private key for ssh connection to the target repository
+    ssh_private_key: # optional
+    # Target url
+    target_repo_url: "https://oauth2:${{ secrets.GITLAB_TOKEN }}@://gitlab.com"
+    # Username for ssh connection
+    ssh_username: # optional, default is git
+    # The branch ID for the source
+    source_branch_id: "main"

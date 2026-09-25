@@ -62,6 +62,7 @@ compile_commands.json
 *.csv
 *.png
 *.py
+*.mp4
 
 # vcpkg
 vcpkg_installed/
@@ -72,4 +73,5 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+output/
 

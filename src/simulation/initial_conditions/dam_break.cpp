@@ -16,9 +16,9 @@ void DamBreakIC::buildScenario() {
     const int layers = params_.wallLayers;
 
     // -------------------------------------------------------------
-    // 1. Static Bottom Floor Wall (placed in negative Y layers: y in [-layers*h, 0.0])
+    // 1. Static Bottom Floor Wall (placed in negative Y layers)
     // -------------------------------------------------------------
-    for (double x = params_.domainMin.x - layers * h; x <= params_.domainMax.x; x += h) {
+    for (double x = params_.domainMin.x - layers * h; x <= params_.domainMax.x + layers * h; x += h) {
         for (int layer = 1; layer <= layers; ++layer) {
             double y = params_.domainMin.y - layer * h;
             auto wallP = std::make_shared<SolidParticle>(
@@ -35,7 +35,7 @@ void DamBreakIC::buildScenario() {
     }
 
     // -------------------------------------------------------------
-    // 2. Static Left Containment Wall (placed in negative X layers: x in [-layers*h, 0.0])
+    // 2. Static Left Containment Wall (placed in negative X layers)
     // -------------------------------------------------------------
     for (double y = params_.domainMin.y; y <= params_.domainMax.y; y += h) {
         for (int layer = 1; layer <= layers; ++layer) {
@@ -54,7 +54,28 @@ void DamBreakIC::buildScenario() {
     }
 
     // -------------------------------------------------------------
-    // 3. Static Dam Barrier Wall (obstacle over which fluid spills)
+    // 3. Static Right Containment Wall (retains gravity surge)
+    // -------------------------------------------------------------
+    if (params_.enableRightWall) {
+        for (double y = params_.domainMin.y; y <= params_.domainMax.y; y += h) {
+            for (int layer = 1; layer <= layers; ++layer) {
+                double x = params_.domainMax.x + (layer - 1) * h;
+                auto wallP = std::make_shared<SolidParticle>(
+                    id++,
+                    Vector2D(x, y),
+                    Vector2D(0.0, 0.0),
+                    particleMass,
+                    params_.fluidDensity,
+                    params_.initialInternalEnergy,
+                    MotionType::STATIC
+                );
+                generatedParticles_.push_back(wallP);
+            }
+        }
+    }
+
+    // -------------------------------------------------------------
+    // 4. Static Dam Barrier Wall (obstacle over which fluid spills)
     // -------------------------------------------------------------
     double damXMax = params_.damPos.x + params_.damSize.x;
     double damYMax = params_.damPos.y + params_.damSize.y;
@@ -75,14 +96,14 @@ void DamBreakIC::buildScenario() {
     }
 
     // -------------------------------------------------------------
-    // 4. Dynamic Fluid Column (behind the dam wall)
+    // 5. Dynamic Fluid Column (collapses under gravity)
     // -------------------------------------------------------------
     for (double x = params_.fluidBoxMin.x; x <= params_.fluidBoxMax.x; x += h) {
         for (double y = params_.fluidBoxMin.y; y <= params_.fluidBoxMax.y; y += h) {
             auto fluidP = std::make_shared<FluidParticle>(
                 id++,
                 Vector2D(x, y),
-                Vector2D(0.0, 0.0), // Can set Vector2D(1.0, 0.0) for initial surge speed
+                Vector2D(0.0, 0.0), // Fluid starts at rest; gravity accelerates it downwards
                 particleMass,
                 params_.fluidDensity,
                 params_.initialInternalEnergy
@@ -92,7 +113,7 @@ void DamBreakIC::buildScenario() {
     }
 
     // -------------------------------------------------------------
-    // 5. Dynamic Rigid Obstacle Downstream (spillway target)
+    // 6. Dynamic Rigid Obstacle Downstream
     // -------------------------------------------------------------
     if (params_.enableRigidObstacle) {
         auto rigidBody = std::make_shared<RigidObject>();
@@ -110,13 +131,13 @@ void DamBreakIC::buildScenario() {
                     id++,
                     Vector2D(x, y),
                     Vector2D(0.0, 0.0),
-                    obstacleParticleMass, // Corrected mass matching volume/density
+                    obstacleParticleMass,
                     params_.fluidDensity,
                     params_.initialInternalEnergy,
                     MotionType::DYNAMIC
                 );
 
-                generatedParticles_.push_back(solidP);
+                // Added only to rigidBody to avoid double-counting in engine/metrics
                 rigidBody->addParticle(solidP);
             }
         }
@@ -136,5 +157,3 @@ std::vector<std::shared_ptr<RigidObject>> DamBreakIC::getRigidObjects() {
     buildScenario();
     return generatedRigidObjects_;
 }
-
-

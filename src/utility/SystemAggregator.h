@@ -12,9 +12,11 @@
 #include <filesystem>
 
 #include "Particle.h"
+#include "RigidBody.h"
 #include "Vector2D.h"
 
 namespace fs = std::filesystem;
+
 struct SystemMetrics {
     double time = 0.0;
     int step = 0;
@@ -61,13 +63,14 @@ public:
 
     // --- Templated Methods (Header-defined for generic container instantiation) ---
 
+    // Particle-only metrics fallback
     template <typename ParticleContainer>
     SystemMetrics compute(const ParticleContainer& particles, double time = 0.0, int step = 0) const {
-        std::vector<int> emptyRigidObjects; // Dummy fallback
+        std::vector<std::shared_ptr<RigidObject>> emptyRigidObjects;
         return compute(particles, emptyRigidObjects, time, step);
     }
 
-    // Compute combined metrics for particles AND rigid bodies
+    // Compute combined metrics for fluid particles AND rigid bodies
     template <typename ParticleContainer, typename RigidContainer>
     SystemMetrics compute(const ParticleContainer& particles, 
                           const RigidContainer& rigidObjects, 
@@ -97,11 +100,6 @@ public:
             metrics.minDensity = std::min(metrics.minDensity, d);
             metrics.maxDensity = std::max(metrics.maxDensity, d);
 
-            // Pressure bounds
-            //double press = p->pressure;
-            //metrics.minPressure = std::min(metrics.minPressure, press);
-            //metrics.maxPressure = std::max(metrics.maxPressure, press);
-//
             // Maximum speed tracking
             double speed = p->vel.length();
             metrics.maxSpeed = std::max(metrics.maxSpeed, speed);
@@ -136,6 +134,7 @@ public:
         return metrics;
     }
 
+    // Process and log metrics for both fluid particles and rigid bodies
     template <typename ParticleContainer, typename RigidContainer>
     SystemMetrics processAndLog(const ParticleContainer& particles, 
                                 const RigidContainer& rigidObjects, 
@@ -168,18 +167,19 @@ public:
     // Process and log particle-only metrics overload
     template <typename ParticleContainer>
     SystemMetrics processAndLog(const ParticleContainer& particles, double time, int step) {
-        std::vector<int> emptyRigidObjects;
+        std::vector<std::shared_ptr<RigidObject>> emptyRigidObjects;
         return processAndLog(particles, emptyRigidObjects, time, step);
     }
 
-    // Frame CSV export including both fluid particles and rigid body particles
-    template <typename ParticleContainer>
+    // Frame CSV export including BOTH fluid particles (type = 0) and rigid body particles (type = 1)
+    template <typename ParticleContainer, typename RigidContainer>
     bool exportFrameCSV(size_t frameIndex, 
-                        const ParticleContainer& particles) const 
+                        const ParticleContainer& fluidParticles,
+                        const RigidContainer& rigidObjects) const 
     {
         if (frameOutputDir_.empty()) return false;
 
-        std::filesystem::create_directories(frameOutputDir_);
+        fs::create_directories(frameOutputDir_);
 
         std::ostringstream filename;
         filename << frameOutputDir_ << "/frame_" 
@@ -190,16 +190,37 @@ public:
 
         file << "id,x,y,vx,vy,density,internal_energy,mass,type\n";
 
-        for (const auto& p : particles) {
+        // 1. Export Fluid Particles (Type 0)
+        for (const auto& p : fluidParticles) {
             file << p->id << ","
                  << p->pos.x << "," << p->pos.y << ","
                  << p->vel.x << "," << p->vel.y << ","
                  << p->density << ","
                  << p->u << ","
-                 << p->mass << ","
-                 << (p->isDynamic() ? 0 : 1) << "\n";
+                 << p->mass << ",0\n";
+        }
+
+        // 2. Export Rigid Body Constituent Particles (Type 1)
+        for (const auto& obj : rigidObjects) {
+            for (const auto& p : obj->getParticles()) {
+                file << p->id << ","
+                     << p->pos.x << "," << p->pos.y << ","
+                     << p->vel.x << "," << p->vel.y << ","
+                     << p->density << ","
+                     << p->u << ","
+                     << p->mass << ",1\n";
+            }
         }
 
         return true;
+    }
+
+    // Single-container fallback for fluid-only frame CSV export
+    template <typename ParticleContainer>
+    bool exportFrameCSV(size_t frameIndex, 
+                        const ParticleContainer& particles) const 
+    {
+        std::vector<std::shared_ptr<RigidObject>> emptyRigidObjects;
+        return exportFrameCSV(frameIndex, particles, emptyRigidObjects);
     }
 };

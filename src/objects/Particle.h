@@ -13,6 +13,8 @@ enum class MotionType
     DYNAMIC //particle, breakable wall, pistons driven by force..
 };
 
+class RigidObject;
+
 class Particle 
 {
 public:
@@ -28,6 +30,7 @@ public:
     double h = 0.0; //smoothing length 
     double pressure = 0.0;
 
+    RigidObject* parentBody = nullptr;
 protected:
     std::shared_ptr<IBoundary> boundaryComponent_ = nullptr;
 public:

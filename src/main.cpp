@@ -14,15 +14,15 @@
 #include <memory>
 #include <iomanip>
 
-#include "simulation.h"
-#include "sphsolver.h"
-#include "kernel.h"
+#include "simulation/simulation.h"
+#include "simulation/sphsolver.h"
+#include "phys/Integrator/kernel.h"
 
-#include "dam_break.h"
-#include "sod_shock_tube.h"
-#include "thermal_equilibrium.h"
+#include "simulation/initial_conditions/dam_break.h"
+#include "simulation/initial_conditions/sod_shock_tube.h"
+#include "simulation/initial_conditions/thermal_equilibrium.h"
 
-#include "SystemAggregator.h"
+#include "utility/SystemAggregator.h"
 
 #include <iostream>
 #include <fstream>
@@ -307,37 +307,37 @@ int main() {
     std::cout << "========================================\n\n";
 
     // 1. Configure SPH Solver Parameters
-    SPHSolver::Parameters solverParams;
+    Parameters solverParams;
     solverParams.gamma = 1.4; // Ratio of specific heats for ideal gas
     solverParams.alpha = 1.0; // Artificial viscosity alpha coefficient
     solverParams.beta  = 2.0; // Artificial viscosity beta coefficient
     solverParams.eta   = 1.3; // Scale factor for adaptive smoothing length (h_i)
-
-    SPHSolver solver(solverParams);
 
     // 2. Instantiate Concrete Kernel (passed via shared_ptr for polymorphic Kernel base)
     auto kernel = std::make_shared<CubicSplineKernel>();
 
     // 3. Configure and Select Initial Conditions Scenario
     DamBreakIC::Parameters damParams;
-    damParams.fluidBoxMin = Vector2D(0.0, 0.0);
-    damParams.fluidBoxMax = Vector2D(0.4, 0.8);
-    damParams.obstaclePos = Vector2D(0.6, 0.0);
-    damParams.obstacleSize = Vector2D(0.15, 0.3);
-    damParams.spacing = 0.02;
+    damParams.enableGravity = true;
+    damParams.gravity = Vector2D(0.0, -9.81);
 
-    auto scenario = std::make_unique<DamBreakIC>(damParams);
+    auto ic = std::make_unique<DamBreakIC>(damParams);
 
-    // 4. Configure Simulation Engine Settings
+    solverParams.enableGravity = damParams.enableGravity;
+    solverParams.gravity = damParams.gravity;
+    SPHSolver solver(solverParams);
+
+    // 2. Configure Simulation Engine with Gravity
     SimulationEngine::Configuration config;
-    config.tFinal = 5.0;        // Total physical time (seconds)
-    config.initialDt = 1e-4;    // Initial timestep (seconds)
-    config.supportRadius = 0.2; // Search radius for boundary ghost creation
+    config.enableGravity = damParams.enableGravity;
+    config.gravity = damParams.gravity;
+    config.domainMin = damParams.domainMin;
+    config.domainMax = damParams.domainMax;
 
-    size_t threadCount = 20;     // Multi-threading pool size
+    size_t threadCount = 4;
 
-    // 5. Initialize Simulation Engine
-    SimulationEngine engine(config, solver, kernel, std::move(scenario), threadCount);
+    // 3. Create Engine
+    SimulationEngine engine(config, solver, kernel, std::move(ic), threadCount);
 
     std::cout << "Simulation Initialized:\n";
     std::cout << "  - Fluid Particles : " << engine.getParticles().size() << "\n";

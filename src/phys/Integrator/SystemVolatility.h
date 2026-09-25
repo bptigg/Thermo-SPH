@@ -14,7 +14,7 @@ struct VolatilityMetrics {
 class SystemVolatility {
 public:
     static VolatilityMetrics evaluate(
-        const std::vector<std::unique_ptr<Particle>>& particles,
+        const std::vector<std::shared_ptr<Particle>>& particles,
         double h,
         double gamma = 1.4,
         size_t sampleSize = 128); // Target sample count

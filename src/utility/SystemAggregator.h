@@ -6,141 +6,200 @@
 #include <iostream>
 #include <iomanip>
 #include <string>
+#include <sstream>
+#include <algorithm>
+#include <cmath>
+#include <filesystem>
 
 #include "Particle.h"
 #include "Vector2D.h"
 
-// Snapshot container for aggregated global metrics
+namespace fs = std::filesystem;
 struct SystemMetrics {
     double time = 0.0;
     int step = 0;
+
+    // Conservation quantities
     Vector2D totalMomentum{0.0, 0.0};
     double kineticEnergy = 0.0;
     double internalEnergy = 0.0;
     double totalEnergy = 0.0;
     double totalMass = 0.0;
+
+    Vector2D fluidMomentum{0.0, 0.0};
+    Vector2D rigidBodyMomentum{0.0, 0.0};
+    double fluidKineticEnergy = 0.0;
+    double rigidBodyKineticEnergy = 0.0;
+
+    // Thermodynamic state & stability bounds
     double avgDensity = 0.0;
+    double minDensity = 1e9;
+    double maxDensity = -1e9;
+    double minPressure = 1e9;
+    double maxPressure = -1e9;
+    double maxSpeed = 0.0;
+
     size_t particleCount = 0;
+    size_t rigidBodyCount = 0;
 };
 
 class SystemAggregator {
 private:
-    std::ofstream logFile_;
-    bool loggingEnabled_ = false;
+    std::ofstream metricsLogFile_;
+    std::string frameOutputDir_ = "output/frames";
+    bool metricsLoggingEnabled_ = false;
 
 public:
     SystemAggregator() = default;
+    explicit SystemAggregator(const std::string& logFilePath, 
+                             const std::string& frameOutputDir = "output/frames");
+    ~SystemAggregator();
 
-    // Optional constructor that opens a CSV file for time-series logging
-    explicit SystemAggregator(const std::string& logFilePath) {
-        openLogFile(logFilePath);
+    void setFrameDirectory(const std::string& frameOutputDir);
+    bool openLogFile(const std::string& logFilePath);
+    static void printSummary(const SystemMetrics& metrics);
+
+    // --- Templated Methods (Header-defined for generic container instantiation) ---
+
+    template <typename ParticleContainer>
+    SystemMetrics compute(const ParticleContainer& particles, double time = 0.0, int step = 0) const {
+        std::vector<int> emptyRigidObjects; // Dummy fallback
+        return compute(particles, emptyRigidObjects, time, step);
     }
 
-    ~SystemAggregator() {
-        if (logFile_.is_open()) {
-            logFile_.close();
-        }
-    }
-
-    // Opens log file and writes CSV header
-    bool openLogFile(const std::string& logFilePath) {
-        logFile_.open(logFilePath);
-        if (logFile_.is_open()) {
-            loggingEnabled_ = true;
-            logFile_ << "time,step,px,py,e_kin,e_int,e_tot,total_mass,avg_density\n";
-            return true;
-        }
-        loggingEnabled_ = false;
-        return false;
-    }
-
-    // Computes system sums over std::unique_ptr<Particle> containers
-    SystemMetrics compute(const std::vector<std::unique_ptr<Particle>>& particles, 
+    // Compute combined metrics for particles AND rigid bodies
+    template <typename ParticleContainer, typename RigidContainer>
+    SystemMetrics compute(const ParticleContainer& particles, 
+                          const RigidContainer& rigidObjects, 
                           double time = 0.0, 
-                          int step = 0) const {
+                          int step = 0) const 
+    {
         SystemMetrics metrics;
         metrics.time = time;
         metrics.step = step;
 
         double densitySum = 0.0;
 
+        // 1. Process Fluid / General Particles
         for (const auto& p : particles) {
-            metrics.totalMomentum += p->getMomentum();
-            metrics.kineticEnergy += p->getKineticEnergy();
-            metrics.internalEnergy += p->getInternalEnergy();
+            Vector2D momentum = p->getMomentum();
+            double kinE = p->getKineticEnergy();
+            double intE = p->getInternalEnergy();
+
+            metrics.fluidMomentum += momentum;
+            metrics.fluidKineticEnergy += kinE;
+            metrics.internalEnergy += intE;
             metrics.totalMass += p->mass;
-            densitySum += p->density;
+
+            // Density bounds
+            double d = p->density;
+            densitySum += d;
+            metrics.minDensity = std::min(metrics.minDensity, d);
+            metrics.maxDensity = std::max(metrics.maxDensity, d);
+
+            // Pressure bounds
+            //double press = p->pressure;
+            //metrics.minPressure = std::min(metrics.minPressure, press);
+            //metrics.maxPressure = std::max(metrics.maxPressure, press);
+//
+            // Maximum speed tracking
+            double speed = p->vel.length();
+            metrics.maxSpeed = std::max(metrics.maxSpeed, speed);
+
             metrics.particleCount++;
         }
 
-        metrics.totalEnergy = metrics.kineticEnergy + metrics.internalEnergy;
-
         if (metrics.particleCount > 0) {
             metrics.avgDensity = densitySum / static_cast<double>(metrics.particleCount);
+        } else {
+            metrics.minDensity = 0.0;
+            metrics.maxDensity = 0.0;
+            metrics.minPressure = 0.0;
+            metrics.maxPressure = 0.0;
         }
+
+        // 2. Process Rigid Bodies
+        for (const auto& obj : rigidObjects) {
+            metrics.rigidBodyCount++;
+            for (const auto& p : obj->getParticles()) {
+                metrics.rigidBodyMomentum += p->getMomentum();
+                metrics.rigidBodyKineticEnergy += p->getKineticEnergy();
+                metrics.totalMass += p->mass;
+            }
+        }
+
+        // Combined Totals
+        metrics.totalMomentum = metrics.fluidMomentum + metrics.rigidBodyMomentum;
+        metrics.kineticEnergy = metrics.fluidKineticEnergy + metrics.rigidBodyKineticEnergy;
+        metrics.totalEnergy = metrics.kineticEnergy + metrics.internalEnergy;
 
         return metrics;
     }
 
-    // Overload for std::shared_ptr<Particle> containers (e.g. RigidObjects/Pistons)
-    SystemMetrics compute(const std::vector<std::shared_ptr<Particle>>& particles, 
-                          double time = 0.0, 
-                          int step = 0) const {
-        SystemMetrics metrics;
-        metrics.time = time;
-        metrics.step = step;
-
-        double densitySum = 0.0;
-
-        for (const auto& p : particles) {
-            metrics.totalMomentum += p->getMomentum();
-            metrics.kineticEnergy += p->getKineticEnergy();
-            metrics.internalEnergy += p->getInternalEnergy();
-            metrics.totalMass += p->mass;
-            densitySum += p->density;
-            metrics.particleCount++;
-        }
-
-        metrics.totalEnergy = metrics.kineticEnergy + metrics.internalEnergy;
-
-        if (metrics.particleCount > 0) {
-            metrics.avgDensity = densitySum / static_cast<double>(metrics.particleCount);
-        }
-
-        return metrics;
-    }
-
-    // Calculates current system metrics and writes a line to the log file
-    SystemMetrics processAndLog(const std::vector<std::unique_ptr<Particle>>& particles, 
+    template <typename ParticleContainer, typename RigidContainer>
+    SystemMetrics processAndLog(const ParticleContainer& particles, 
+                                const RigidContainer& rigidObjects, 
                                 double time, 
-                                int step) {
-        SystemMetrics metrics = compute(particles, time, step);
+                                int step) 
+    {
+        SystemMetrics metrics = compute(particles, rigidObjects, time, step);
 
-        if (loggingEnabled_ && logFile_.is_open()) {
-            logFile_ << std::scientific << std::setprecision(8)
-                     << metrics.time << ","
-                     << metrics.step << ","
-                     << metrics.totalMomentum.x << ","
-                     << metrics.totalMomentum.y << ","
-                     << metrics.kineticEnergy << ","
-                     << metrics.internalEnergy << ","
-                     << metrics.totalEnergy << ","
-                     << metrics.totalMass << ","
-                     << metrics.avgDensity << "\n";
+        if (metricsLoggingEnabled_ && metricsLogFile_.is_open()) {
+            metricsLogFile_ << std::scientific << std::setprecision(8)
+                            << metrics.time << ","
+                            << metrics.step << ","
+                            << metrics.totalMomentum.x << ","
+                            << metrics.totalMomentum.y << ","
+                            << metrics.kineticEnergy << ","
+                            << metrics.internalEnergy << ","
+                            << metrics.totalEnergy << ","
+                            << metrics.totalMass << ","
+                            << metrics.avgDensity << ","
+                            << metrics.minDensity << ","
+                            << metrics.maxDensity << ","
+                            << metrics.maxSpeed << ","
+                            << metrics.particleCount << ","
+                            << metrics.rigidBodyCount << "\n";
         }
 
         return metrics;
     }
 
-    // Formatted terminal output for step monitoring
-    static void printSummary(const SystemMetrics& metrics) {
-        std::cout << std::fixed << std::setprecision(5)
-                  << "--- [Step " << metrics.step << " | Time: " << metrics.time << "s] ---\n"
-                  << "  Total Energy:    " << metrics.totalEnergy 
-                  << " (Kin: " << metrics.kineticEnergy << " | Int: " << metrics.internalEnergy << ")\n"
-                  << "  Total Momentum:  (" << metrics.totalMomentum.x << ", " << metrics.totalMomentum.y << ")\n"
-                  << "  Total Mass:      " << metrics.totalMass << "\n"
-                  << "  Avg Density:     " << metrics.avgDensity << "\n"
-                  << "----------------------------------------\n";
+    // Process and log particle-only metrics overload
+    template <typename ParticleContainer>
+    SystemMetrics processAndLog(const ParticleContainer& particles, double time, int step) {
+        std::vector<int> emptyRigidObjects;
+        return processAndLog(particles, emptyRigidObjects, time, step);
+    }
+
+    // Frame CSV export including both fluid particles and rigid body particles
+    template <typename ParticleContainer>
+    bool exportFrameCSV(size_t frameIndex, 
+                        const ParticleContainer& particles) const 
+    {
+        if (frameOutputDir_.empty()) return false;
+
+        std::filesystem::create_directories(frameOutputDir_);
+
+        std::ostringstream filename;
+        filename << frameOutputDir_ << "/frame_" 
+                 << std::setfill('0') << std::setw(5) << frameIndex << ".csv";
+
+        std::ofstream file(filename.str());
+        if (!file.is_open()) return false;
+
+        file << "id,x,y,vx,vy,density,internal_energy,mass,type\n";
+
+        for (const auto& p : particles) {
+            file << p->id << ","
+                 << p->pos.x << "," << p->pos.y << ","
+                 << p->vel.x << "," << p->vel.y << ","
+                 << p->density << ","
+                 << p->u << ","
+                 << p->mass << ","
+                 << (p->isDynamic() ? 0 : 1) << "\n";
+        }
+
+        return true;
     }
 };

@@ -20,9 +20,9 @@ private:
     std::unordered_map<int64_t, std::vector<size_t>> grid_;
 
 public:
-    explicit SpatialGrid(double cellSize) : cellSize_(cellSize) {}
+    explicit SpatialGrid(double cellSize = 0.2) : cellSize_(cellSize) {}
 
-    void build(const std::vector<std::unique_ptr<Particle>>& particles);
+    void build(const std::vector<std::shared_ptr<Particle>>& particles);
 
     std::vector<size_t> getNeighborIndices(const Vector2D& pos) const {
         std::vector<size_t> neighbors;

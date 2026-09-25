@@ -1,7 +1,7 @@
 #include "SpatialGrid.h"
 #include "Particle.h"
 
-void SpatialGrid::build(const std::vector<std::unique_ptr<Particle>> &particles)
+void SpatialGrid::build(const std::vector<std::shared_ptr<Particle>> &particles)
 {
     grid_.clear();
     for (size_t i = 0; i < particles.size(); ++i) {

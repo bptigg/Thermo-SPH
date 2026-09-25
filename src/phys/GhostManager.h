@@ -5,11 +5,11 @@
 
 class GhostManager {
 public:
-    static std::vector<std::unique_ptr<Particle>> generateAllGhosts(
-        const std::vector<std::unique_ptr<Particle>>& worldParticles,
+    static std::vector<std::shared_ptr<Particle>> generateAllGhosts(
+        const std::vector<std::shared_ptr<Particle>>& worldParticles,
         double supportRadius) 
     {
-        std::vector<std::unique_ptr<Particle>> allGhosts;
+        std::vector<std::shared_ptr<Particle>> allGhosts;
 
         for (const auto& p : worldParticles) {
             if (p->hasBoundary()) {

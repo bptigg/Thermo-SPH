@@ -14,6 +14,8 @@ INCLUDES  := -I $(SRC_DIR) \
              -I $(SRC_DIR)/phys \
 			 -I $(SRC_DIR)/phys/Boundaries \
 			 -I $(SRC_DIR)/phys/Integrator \
+			 -I $(SRC_DIR)/simulation \
+			 -I $(SRC_DIR)/simulation/initial_conditions \
 			 -I $(SRC_DIR)/utility \
              -I $(TEST_DIR)
 

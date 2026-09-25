@@ -1,14 +1,14 @@
 #include "Circular.h"
 #include "Particle.h"
 
-std::vector<std::unique_ptr<Particle>> CircularBoundary::generateGhosts(
+std::vector<std::shared_ptr<Particle>> CircularBoundary::generateGhosts(
     const Vector2D& hostPos,
     const Vector2D& hostVel,
     double hostEnergy,
-    const std::vector<std::unique_ptr<Particle>>& fluidParticles,
+    const std::vector<std::shared_ptr<Particle>>& fluidParticles,
     double supportRadius) const 
 {
-    std::vector<std::unique_ptr<Particle>> ghosts;
+    std::vector<std::shared_ptr<Particle>> ghosts;
     int ghostID = -1;
 
     for (const auto& fluid : fluidParticles) {

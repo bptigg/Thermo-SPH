@@ -9,13 +9,13 @@
 
 class VelocityVerletIntegrator {
 private:
-    double h_;
-    double gamma_;
-    double cflSafety_;
-    double maxDt_;
-    double minDt_;
-    size_t sampleSize_;
-    SpatialGrid spatialGrid_;
+    double h_ = 0.2;
+    double gamma_ = 1.4;
+    double cflSafety_ = 0.25;
+    double maxDt_ = 1e-3;
+    double minDt_ = 1e-7;
+    size_t sampleSize_ = 128;
+    SpatialGrid spatialGrid_{0.4};
 
 public:
     VelocityVerletIntegrator(
@@ -33,14 +33,18 @@ public:
           sampleSize_(sampleSize),
           spatialGrid_(2.0 * h) {}
 
+    VelocityVerletIntegrator() = default;
+    explicit VelocityVerletIntegrator(SpatialGrid grid)
+        : spatialGrid_(std::move(grid)) {}
+
     // Parallelized Integration Steps
-    void kickFirstHalf(std::vector<std::unique_ptr<Particle>>& particles, double dt, ThreadPool& pool) const;
-    void drift(std::vector<std::unique_ptr<Particle>>& particles, double dt, ThreadPool& pool) const;
-    void kickSecondHalf(std::vector<std::unique_ptr<Particle>>& particles, double dt, ThreadPool& pool) const;
+    void kickFirstHalf(std::vector<std::shared_ptr<Particle>>& particles, double dt, ThreadPool& pool) const;
+    void drift(std::vector<std::shared_ptr<Particle>>& particles, double dt, ThreadPool& pool) const;
+    void kickSecondHalf(std::vector<std::shared_ptr<Particle>>& particles, double dt, ThreadPool& pool) const;
 
     // Single-threaded O(1) Volatility Calculation (128-particle strided sample)
     double computeAdaptiveTimestep(
-        const std::vector<std::unique_ptr<Particle>>& particles,
+        const std::vector<std::shared_ptr<Particle>>& particles,
         double currentDt) const;
 
     SpatialGrid& getSpatialGrid() { return spatialGrid_; }

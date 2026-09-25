@@ -25,6 +25,14 @@ struct Vector2D {
     double normSq() const;
     double norm() const;
     Vector2D normalized() const;
+
+    double length() const {
+        return std::hypot(x, y);
+    }
+
+    double lengthSquared() const {
+        return x * x + y * y;
+    }
 };
 
 Vector2D operator*(double scalar, const Vector2D& vec);

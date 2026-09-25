@@ -25,9 +25,10 @@ public:
     double density = 0.0;
     double u = 0.0; //specific internal energy
     double dudt = 0.0; // rate of change of internal energy
+    double h = 0.0; //smoothing length 
 
 protected:
-    std::unique_ptr<IBoundary> boundaryComponent_ = nullptr;
+    std::shared_ptr<IBoundary> boundaryComponent_ = nullptr;
 public:
 
     Particle(int id, Vector2D pos, Vector2D vel, double m, double r, double u)
@@ -47,7 +48,7 @@ public:
     bool isNonStatic() const { return getMotionType() == MotionType::NONSTATIC; }
     bool isDynamic() const { return getMotionType() == MotionType::DYNAMIC; }
 
-    void setBoundaryComponent(std::unique_ptr<IBoundary> boundary) {
+    void setBoundaryComponent(std::shared_ptr<IBoundary> boundary) {
         boundaryComponent_ = std::move(boundary);
     }
 
@@ -55,8 +56,8 @@ public:
         return boundaryComponent_ != nullptr; 
     }
 
-    std::vector<std::unique_ptr<Particle>> generateGhosts(
-        const std::vector<std::unique_ptr<Particle>>& fluidParticles, 
+    std::vector<std::shared_ptr<Particle>> generateGhosts(
+        const std::vector<std::shared_ptr<Particle>>& fluidParticles, 
         double supportRadius) const 
     {
         if (!boundaryComponent_) return {};

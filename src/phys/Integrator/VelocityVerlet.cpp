@@ -3,7 +3,7 @@
 #include "VelocityVerlet.h"
 
 void VelocityVerletIntegrator::kickFirstHalf(
-    std::vector<std::unique_ptr<Particle>>& particles, 
+    std::vector<std::shared_ptr<Particle>>& particles, 
     double dt, 
     ThreadPool& pool) const 
 {
@@ -33,7 +33,7 @@ void VelocityVerletIntegrator::kickFirstHalf(
 }
 
 void VelocityVerletIntegrator::drift(
-    std::vector<std::unique_ptr<Particle>>& particles, 
+    std::vector<std::shared_ptr<Particle>>& particles, 
     double dt, 
     ThreadPool& pool) const 
 {
@@ -59,7 +59,7 @@ void VelocityVerletIntegrator::drift(
 }
 
 void VelocityVerletIntegrator::kickSecondHalf(
-    std::vector<std::unique_ptr<Particle>>& particles, 
+    std::vector<std::shared_ptr<Particle>>& particles, 
     double dt, 
     ThreadPool& pool) const 
 {
@@ -89,7 +89,7 @@ void VelocityVerletIntegrator::kickSecondHalf(
 }
 
 double VelocityVerletIntegrator::computeAdaptiveTimestep(
-    const std::vector<std::unique_ptr<Particle>>& particles,
+    const std::vector<std::shared_ptr<Particle>>& particles,
     double currentDt) const 
 {
     // Evaluates strided sample (sampleSize = 128) sequentially

@@ -3,7 +3,7 @@
 #include <algorithm>
 
 VolatilityMetrics SystemVolatility::evaluate(
-    const std::vector<std::unique_ptr<Particle>>& particles,
+    const std::vector<std::shared_ptr<Particle>>& particles,
     double h,
     double gamma,
     size_t sampleSize) 

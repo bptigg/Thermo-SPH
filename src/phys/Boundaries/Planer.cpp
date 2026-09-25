@@ -8,14 +8,14 @@ PlanarBoundary::PlanarBoundary(Vector2D normal, bool isNoSlip)
     normal_ = (len > 0.0) ? normal / len : Vector2D(0.0, 1.0);
 }
 
-std::vector<std::unique_ptr<Particle>> PlanarBoundary::generateGhosts(
+std::vector<std::shared_ptr<Particle>> PlanarBoundary::generateGhosts(
     const Vector2D& hostPos,
     const Vector2D& hostVel,
     double hostEnergy,
-    const std::vector<std::unique_ptr<Particle>>& fluidParticles,
+    const std::vector<std::shared_ptr<Particle>>& fluidParticles,
     double supportRadius) const 
 {
-    std::vector<std::unique_ptr<Particle>> ghosts;
+    std::vector<std::shared_ptr<Particle>> ghosts;
     int ghostID = -1;
 
     for (const auto& fluid : fluidParticles) {

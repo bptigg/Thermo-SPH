@@ -9,10 +9,10 @@ private:
 public:
     PlanarBoundary(Vector2D normal, bool isNoSlip = true);
 
-    std::vector<std::unique_ptr<Particle>> generateGhosts(
+    std::vector<std::shared_ptr<Particle>> generateGhosts(
         const Vector2D& hostPos,
         const Vector2D& hostVel,
         double hostEnergy,
-        const std::vector<std::unique_ptr<Particle>>& fluidParticles,
+        const std::vector<std::shared_ptr<Particle>>& fluidParticles,
         double supportRadius) const override;
 };

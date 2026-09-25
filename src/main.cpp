@@ -355,7 +355,7 @@ int main() {
 
     engine.getThreadPool().start();
     SystemMetrics metrics = logger.processAndLog(engine.getParticles(), engine.getRigidObjects(), 0.0, 0);
-    logger.exportFrameCSV(frameIdx++, engine.getParticles());
+    logger.exportFrameCSV(frameIdx++, engine.getParticles(), engine.getRigidObjects());
     while (engine.getCurrentTime() < config.tFinal) {
         engine.step();
 
@@ -367,7 +367,7 @@ int main() {
 
         // 2. Export Visualization Frame (Unnested: runs every step to catch precise 60 FPS target times)
         if (currentTime >= nextFrameTime) {
-            logger.exportFrameCSV(frameIdx++, engine.getParticles());
+            logger.exportFrameCSV(frameIdx++, engine.getParticles(), engine.getRigidObjects());
             nextFrameTime += frameInterval;
         }
 

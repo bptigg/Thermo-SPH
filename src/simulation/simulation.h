@@ -17,7 +17,7 @@ public:
     struct Configuration {
         double tFinal = 10.0;
         double initialDt = 1e-4;
-        double supportRadius = 0.1;
+        double supportRadius = 0.2;
 
         // Bounding box for domain classification
         Vector2D domainMin = Vector2D(0.0, 0.0);

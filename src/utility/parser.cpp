@@ -165,56 +165,56 @@ void SimulationParser::parseKeystone(const std::string& piston_name, const std::
 // Example Usage
 // ============================================================================
 
-int main(int argc, char* argv[]) {
-    std::string filename = "simulation.input";
-    if (argc > 1) filename = argv[1];
-
-    SimulationParser parser;
-    if (!parser.parse(filename)) {
-        std::cerr << "Failed to parse input file." << std::endl;
-        return 1;
-    }
-
-    // Output parsed data
-    std::cout << "=== Simulation Parameters ===" << std::endl;
-    std::cout << "sim_t: " << parser.params.sim_t << std::endl;
-    std::cout << "dt: " << parser.params.dt << std::endl;
-    std::cout << "N_particle: " << parser.params.N_particle << std::endl;
-
-    std::cout << "\n=== Regions ===" << std::endl;
-    for (const auto& [name, region] : parser.regions) {
-        std::cout << "Region: " << name << std::endl;
-        std::cout << "  Bounds: (" << region.x1 << ", " << region.x2 
-                  << ") x (" << region.y1 << ", " << region.y2 << ")" << std::endl;
-        std::cout << "  T: " << region.T << ", rho_0: " << region.rho_0 
-                  << ", m: " << region.m << std::endl;
-        std::cout << "  do_output: " << (region.do_output ? "true" : "false") << std::endl;
-    }
-
-    std::cout << "\n=== Walls ===" << std::endl;
-    for (const auto& [name, wall] : parser.walls) {
-        std::cout << "Wall: " << name << " (type: " << wall.type << ")" << std::endl;
-        std::cout << "  Bounds: (" << wall.x1 << ", " << wall.x2 
-                  << ") x (" << wall.y1 << ", " << wall.y2 << ")" << std::endl;
-        std::cout << "  lock: x=" << wall.lock_x << " y=" << wall.lock_y 
-                  << " rot=" << wall.lock_rot << ", m: " << wall.m << std::endl;
-        std::cout << "  do_output: " << (wall.do_output ? "true" : "false") << std::endl;
-    }
-
-    std::cout << "\n=== Pistons ===" << std::endl;
-    for (const auto& [name, piston] : parser.pistons) {
-        std::cout << "Piston: " << name << std::endl;
-        std::cout << "  width: " << piston.width << ", depth: " << piston.depth 
-                  << ", alpha: " << piston.alpha << std::endl;
-        std::cout << "  loop: " << (piston.loop ? "true" : "false") 
-                  << ", do_output: " << (piston.do_output ? "true" : "false") << std::endl;
-        std::cout << "  Keystones (" << piston.keystones.size() << "):" << std::endl;
-        for (size_t i = 0; i < piston.keystones.size(); ++i) {
-            const auto& k = piston.keystones[i];
-            std::cout << "    [" << i << "] x=" << k.x << ", y=" << k.y 
-                      << ", a=" << k.a << ", t=" << k.t << std::endl;
-        }
-    }
-
-    return 0;
-}
+//int main(int argc, char* argv[]) {
+//    std::string filename = "simulation.input";
+//    if (argc > 1) filename = argv[1];
+//
+//    SimulationParser parser;
+//    if (!parser.parse(filename)) {
+//        std::cerr << "Failed to parse input file." << std::endl;
+//        return 1;
+//    }
+//
+//    // Output parsed data
+//    std::cout << "=== Simulation Parameters ===" << std::endl;
+//    std::cout << "sim_t: " << parser.params.sim_t << std::endl;
+//    std::cout << "dt: " << parser.params.dt << std::endl;
+//    std::cout << "N_particle: " << parser.params.N_particle << std::endl;
+//
+//    std::cout << "\n=== Regions ===" << std::endl;
+//    for (const auto& [name, region] : parser.regions) {
+//        std::cout << "Region: " << name << std::endl;
+//        std::cout << "  Bounds: (" << region.x1 << ", " << region.x2 
+//                  << ") x (" << region.y1 << ", " << region.y2 << ")" << std::endl;
+//        std::cout << "  T: " << region.T << ", rho_0: " << region.rho_0 
+//                  << ", m: " << region.m << std::endl;
+//        std::cout << "  do_output: " << (region.do_output ? "true" : "false") << std::endl;
+//    }
+//
+//    std::cout << "\n=== Walls ===" << std::endl;
+//    for (const auto& [name, wall] : parser.walls) {
+//        std::cout << "Wall: " << name << " (type: " << wall.type << ")" << std::endl;
+//        std::cout << "  Bounds: (" << wall.x1 << ", " << wall.x2 
+//                  << ") x (" << wall.y1 << ", " << wall.y2 << ")" << std::endl;
+//        std::cout << "  lock: x=" << wall.lock_x << " y=" << wall.lock_y 
+//                  << " rot=" << wall.lock_rot << ", m: " << wall.m << std::endl;
+//        std::cout << "  do_output: " << (wall.do_output ? "true" : "false") << std::endl;
+//    }
+//
+//    std::cout << "\n=== Pistons ===" << std::endl;
+//    for (const auto& [name, piston] : parser.pistons) {
+//        std::cout << "Piston: " << name << std::endl;
+//        std::cout << "  width: " << piston.width << ", depth: " << piston.depth 
+//                  << ", alpha: " << piston.alpha << std::endl;
+//        std::cout << "  loop: " << (piston.loop ? "true" : "false") 
+//                  << ", do_output: " << (piston.do_output ? "true" : "false") << std::endl;
+//        std::cout << "  Keystones (" << piston.keystones.size() << "):" << std::endl;
+//        for (size_t i = 0; i < piston.keystones.size(); ++i) {
+//            const auto& k = piston.keystones[i];
+//            std::cout << "    [" << i << "] x=" << k.x << ", y=" << k.y 
+//                      << ", a=" << k.a << ", t=" << k.t << std::endl;
+//        }
+//    }
+//
+//    return 0;
+//}

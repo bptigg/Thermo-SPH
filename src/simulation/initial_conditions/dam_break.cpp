@@ -1,4 +1,5 @@
 #include "dam_break.h"
+#include <memory>
 
 DamBreakIC::DamBreakIC() : DamBreakIC(Parameters{}) {}
 DamBreakIC::DamBreakIC(Parameters params) : params_(params) {}
@@ -101,13 +102,15 @@ void DamBreakIC::buildScenario() {
         double oxMax = oxMin + params_.obstacleSize.x;
         double oyMax = oyMin + params_.obstacleSize.y;
 
+        double obstacleParticleMass = (params_.fluidDensity * params_.obstacleDensityRatio) * h * h;
+
         for (double x = oxMin; x <= oxMax; x += h) {
             for (double y = oyMin; y <= oyMax; y += h) {
                 auto solidP = std::make_shared<SolidParticle>(
                     id++,
                     Vector2D(x, y),
                     Vector2D(0.0, 0.0),
-                    params_.obstacleParticleMass,
+                    obstacleParticleMass, // Corrected mass matching volume/density
                     params_.fluidDensity,
                     params_.initialInternalEnergy,
                     MotionType::DYNAMIC

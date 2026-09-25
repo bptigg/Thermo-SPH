@@ -26,6 +26,7 @@ public:
     double u = 0.0; //specific internal energy
     double dudt = 0.0; // rate of change of internal energy
     double h = 0.0; //smoothing length 
+    double pressure = 0.0;
 
 protected:
     std::shared_ptr<IBoundary> boundaryComponent_ = nullptr;

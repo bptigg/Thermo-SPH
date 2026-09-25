@@ -330,7 +330,7 @@ int main() {
 
     // 4. Configure Simulation Engine Settings
     SimulationEngine::Configuration config;
-    config.tFinal = 10.0;        // Total physical time (seconds)
+    config.tFinal = 5.0;        // Total physical time (seconds)
     config.initialDt = 1e-4;    // Initial timestep (seconds)
     config.supportRadius = 0.2; // Search radius for boundary ghost creation
 

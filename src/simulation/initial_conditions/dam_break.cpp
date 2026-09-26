@@ -15,9 +15,23 @@ void DamBreakIC::buildScenario() {
     const double h = params_.spacing;
     const int layers = params_.wallLayers;
 
+    auto registerStaticWallBody = [&](std::vector<std::shared_ptr<Particle>>& wallParticles) {
+        if (wallParticles.empty()) return;
+
+        auto wallBody = std::make_shared<RigidObject>();
+        wallBody->setType(RigidBodyType::EXTERNAL_BOUNDARY);
+        for (const auto& p : wallParticles) {
+            wallBody->addParticle(p);
+        }
+        wallBody->finalizeInitialization();
+        wallBody->setConstraints(true, true, true);
+        generatedRigidObjects_.push_back(wallBody);
+    };
+
     // -------------------------------------------------------------
     // 1. Static Bottom Floor Wall (placed in negative Y layers)
     // -------------------------------------------------------------
+    std::vector<std::shared_ptr<Particle>> floorParticles;
     for (double x = params_.domainMin.x - layers * h; x <= params_.domainMax.x + layers * h; x += h) {
         for (int layer = 1; layer <= layers; ++layer) {
             double y = params_.domainMin.y - layer * h;
@@ -31,12 +45,15 @@ void DamBreakIC::buildScenario() {
                 MotionType::STATIC
             );
             generatedParticles_.push_back(wallP);
+            floorParticles.push_back(wallP);
         }
     }
+    registerStaticWallBody(floorParticles);
 
     // -------------------------------------------------------------
     // 2. Static Left Containment Wall (placed in negative X layers)
     // -------------------------------------------------------------
+    std::vector<std::shared_ptr<Particle>> leftWallParticles;
     for (double y = params_.domainMin.y; y <= params_.domainMax.y; y += h) {
         for (int layer = 1; layer <= layers; ++layer) {
             double x = params_.domainMin.x - layer * h;
@@ -50,12 +67,15 @@ void DamBreakIC::buildScenario() {
                 MotionType::STATIC
             );
             generatedParticles_.push_back(wallP);
+            leftWallParticles.push_back(wallP);
         }
     }
+    registerStaticWallBody(leftWallParticles);
 
     // -------------------------------------------------------------
     // 3. Static Right Containment Wall (retains gravity surge)
     // -------------------------------------------------------------
+    std::vector<std::shared_ptr<Particle>> rightWallParticles;
     if (params_.enableRightWall) {
         for (double y = params_.domainMin.y; y <= params_.domainMax.y; y += h) {
             for (int layer = 1; layer <= layers; ++layer) {
@@ -70,13 +90,16 @@ void DamBreakIC::buildScenario() {
                     MotionType::STATIC
                 );
                 generatedParticles_.push_back(wallP);
+                rightWallParticles.push_back(wallP);
             }
         }
     }
+    registerStaticWallBody(rightWallParticles);
 
     // -------------------------------------------------------------
     // 4. Static Dam Barrier Wall (obstacle over which fluid spills)
     // -------------------------------------------------------------
+    std::vector<std::shared_ptr<Particle>> damParticles;
     double damXMax = params_.damPos.x + params_.damSize.x;
     double damYMax = params_.damPos.y + params_.damSize.y;
 
@@ -92,8 +115,10 @@ void DamBreakIC::buildScenario() {
                 MotionType::STATIC
             );
             generatedParticles_.push_back(damP);
+            damParticles.push_back(damP);
         }
     }
+    registerStaticWallBody(damParticles);
 
     // -------------------------------------------------------------
     // 5. Dynamic Fluid Column (collapses under gravity)
@@ -142,6 +167,7 @@ void DamBreakIC::buildScenario() {
             }
         }
 
+        rigidBody->finalizeInitialization();
         generatedRigidObjects_.push_back(rigidBody);
     }
 

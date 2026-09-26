@@ -378,7 +378,7 @@ int main() {
 
             // Track dynamic rigid body Center of Mass if present in scene
             if (!engine.getRigidObjects().empty()) {
-                const auto& body = engine.getRigidObjects()[0];
+                const auto& body = engine.getRigidObjects()[4];
                 Vector2D com = body->getCenterOfMass();
                 std::cout << " | Rigid Body CoM: (" 
                           << std::setprecision(3) << com.x << ", " << com.y << ")";

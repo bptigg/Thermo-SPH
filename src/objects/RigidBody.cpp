@@ -109,14 +109,4 @@ void RigidObject::setConstraints(bool lockX, bool lockY, bool lockRotation) {
     lockX_ = lockX;
     lockY_ = lockY;
     lockRotation_ = lockRotation;
-
-    if (lockX_ == true || lockY_ == true)
-    {
-        lockRotation_ = true;
-    }
-    if(lockRotation_)
-    {
-        lockX_ = true;
-        lockY_ = true;
-    }
 }

@@ -14,11 +14,17 @@ class RigidBodySolver {
 public:
     explicit RigidBodySolver(RigidBodySolverParameters params = {});
 
-    // Solves collisions between pairs of rigid objects using AABB and particle contacts
-    void solveCollisions(std::vector<std::shared_ptr<RigidObject>>& bodies, double dt);
+    // Phase 1: Integrate external forces & gravity into linear and angular velocities
+    void integrateVelocities(std::vector<std::shared_ptr<RigidObject>>& bodies, double dt);
 
-    // Newton-Euler integration of rigid objects
-    void integrate(std::vector<std::shared_ptr<RigidObject>>& bodies, double dt);
+    // Phase 2: Detect particle contact overlaps and resolve via direct impulse & position unwrapping
+    bool solveCollisions(std::vector<std::shared_ptr<RigidObject>>& bodies, double dt);
+
+    // Phase 3: Advance positions and rotations using post-collision velocities
+    void integratePositions(std::vector<std::shared_ptr<RigidObject>>& bodies, double dt);
+
+    // Full pipeline convenience step: integrateVelocities -> solveCollisions -> integratePositions
+    bool integrate(std::vector<std::shared_ptr<RigidObject>>& bodies, double dt);
 
     void setParameters(const RigidBodySolverParameters& params) { params_ = params; }
     const RigidBodySolverParameters& getParameters() const { return params_; }

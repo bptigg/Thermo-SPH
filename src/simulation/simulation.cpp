@@ -107,7 +107,7 @@ void SimulationEngine::step() {
     solver_.computeDerivatives(fluidParticles_, internalRigidParticles, ghosts_, grid_, *kernel_);
 
     // 6. Solid-Solid Collisions & Newton-Euler Integration
-    rigidSolver_.solveCollisions(rigidObjects_, dt_);
+    //rigidSolver_.solveCollisions(rigidObjects_, dt_, threadPool_);
     rigidSolver_.integrate(rigidObjects_, dt_);
 
     // 7. Second half kick & Adaptive Timestep for Fluid Particles

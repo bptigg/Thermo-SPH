@@ -5,11 +5,11 @@ class DamBreakIC : public InitialConditions {
 public:
     struct Parameters {
         Vector2D domainMin = Vector2D(0.0, 0.0);
-        Vector2D domainMax = Vector2D(1.2, 1.0);
+        Vector2D domainMax = Vector2D(5.0, 1.0);
         int wallLayers = 3;
         double spacing = 0.02;
         double fluidDensity = 1.0;
-        double initialInternalEnergy = 1.0;
+        double initialInternalEnergy = 0.5;
 
         // Gravity Settings
         bool enableGravity = true;
@@ -28,7 +28,7 @@ public:
 
         // Dynamic Rigid Block Downstream
         bool enableRigidObstacle = true;
-        Vector2D obstaclePos = Vector2D(0.60, 0.04);
+        Vector2D obstaclePos = Vector2D(0.60, 0.1);
         Vector2D obstacleSize = Vector2D(0.15, 0.20);
         
         // Set obstacle density ratio (e.g., 1.0 for neutral buoyancy, 1.2 for heavier object)

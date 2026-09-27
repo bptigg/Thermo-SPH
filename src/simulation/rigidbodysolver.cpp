@@ -2,6 +2,7 @@
 #include <cmath>
 #include <vector>
 #include <algorithm>
+#include <map>
 
 RigidBodySolver::RigidBodySolver(RigidBodySolverParameters params) : params_(params) {}
 
@@ -39,8 +40,8 @@ bool RigidBodySolver::solveCollisions(std::vector<std::shared_ptr<RigidObject>>&
     size_t numBodies = bodies.size();
     if (numBodies == 0) return false;
 
-    double minDist = 2.0 * params_.particleRadius;
-    double minDistSq = minDist * minDist;
+    //double minDist = 2.0 * params_.particleRadius;
+    //double minDistSq = minDist * minDist;
 
     struct BodyCache {
         bool isStatic;
@@ -74,177 +75,237 @@ bool RigidBodySolver::solveCollisions(std::vector<std::shared_ptr<RigidObject>>&
     struct Contact {
         size_t bodyAIdx;
         size_t bodyBIdx;
-        size_t particleAIdx;
-        size_t particleBIdx;
+        const Particle* pA; 
+        const Particle* pB;
         Vector2D normal;
         double currentDistSq;
         double velAlongNormal;
     };
 
+    struct SAPEndElement {
+        size_t bodyIdx;
+        double value;
+        bool isMin;
+    };
+
+    std::vector<SAPEndElement> endpoints;
+    endpoints.reserve(numBodies * 2);
+
+    for (size_t i = 0; i < numBodies; ++i) {
+        endpoints.push_back({i, bodyCache[i].sweptAABB.min.x, true});
+        endpoints.push_back({i, bodyCache[i].sweptAABB.max.x, false});
+    }
+
+    std::sort(endpoints.begin(), endpoints.end(), [](const SAPEndElement& a, const SAPEndElement& b) {
+        if (a.value == b.value) {
+            return a.isMin && !b.isMin; // Process min endpoints before max on ties
+        }
+        return a.value < b.value;
+    });
+
+    std::vector<std::pair<size_t, size_t>> broadphasePairs;
+    std::vector<size_t> activeBodies;
+
+    for (const auto& endpoint : endpoints) {
+        if (endpoint.isMin) {
+            for (size_t activeIdx : activeBodies) {
+                if (bodyCache[endpoint.bodyIdx].isStatic && bodyCache[activeIdx].isStatic) {
+                    continue;
+                }
+
+                // Check 2D AABB overlap
+                if (bodyCache[endpoint.bodyIdx].sweptAABB.overlaps(bodyCache[activeIdx].sweptAABB)) {
+                    broadphasePairs.emplace_back(endpoint.bodyIdx, activeIdx);
+                }
+            }
+            activeBodies.push_back(endpoint.bodyIdx);
+        } 
+        else {
+            auto it = std::find(activeBodies.begin(), activeBodies.end(), endpoint.bodyIdx);
+            if (it != activeBodies.end()) {
+                activeBodies.erase(it);
+            }
+        }
+    }
+
+    if (broadphasePairs.size() ==0) {
+        return false;
+    }
+
+
     std::vector<Contact> bodyPairContacts;
 
-    // Pass 1: Contact Detection & Pair Reduction (1 primary contact per body pair)
-    for (size_t a = 0; a < numBodies; ++a) {
-        for (size_t b = a + 1; b < numBodies; ++b) {
-            if (bodyCache[a].isStatic && bodyCache[b].isStatic) continue;
-
-            const AABB& aabbA = bodyCache[a].aabb;
-            const AABB& aabbB = bodyCache[b].aabb;
-
-            if (!aabbA.overlaps(aabbB)) {
-                const AABB& sweptA = bodyCache[a].sweptAABB;
-                const AABB& sweptB = bodyCache[b].sweptAABB;
-
-                bool aabbMayIntersect = !(sweptA.max.x < sweptB.min.x || sweptB.max.x < sweptA.min.x ||
-                                          sweptA.max.y < sweptB.min.y || sweptB.max.y < sweptA.min.y);
-                if (!aabbMayIntersect) continue;
-            }
-
+    auto narrowPhaseDection = [](const std::vector<std::pair<size_t, size_t>>& broadphasePairs, 
+        const std::vector<std::shared_ptr<RigidObject>>& bodies,
+        double dt,
+        double particleRadius) 
+    {
+        std::vector<Contact> contacts;
+        double minDist = 2.0 * particleRadius;
+        double minDistSq = minDist * minDist;
+        for (const auto& [a, b] : broadphasePairs) 
+        {
             const auto& bodyA = bodies[a];
             const auto& bodyB = bodies[b];
             const auto& particlesA = bodyA->getParticles();
             const auto& particlesB = bodyB->getParticles();
 
-            bool foundContact = false;
-            Contact bestContact;
-            double minFoundDistSq = 1e18; // Keep deepest penetration point
+            for (const auto& pA : particlesA) 
+            {
+                for (const auto& pB : particlesB) 
+                {
+                    Vector2D relPos = pA->pos - pB->pos;
+                    double currentDistSq = relPos.normSq();
 
-            for (size_t pIdxA = 0; pIdxA < particlesA.size(); ++pIdxA) {
-                const auto& pA = particlesA[pIdxA];
-                for (size_t pIdxB = 0; pIdxB < particlesB.size(); ++pIdxB) {
-                    const auto& pB = particlesB[pIdxB];
+                    // Ignore virtually identical positions to avoid division by zero
+                    if (currentDistSq < 1e-12) continue;
 
-                    Vector2D relStart = pA->pos - pB->pos;
-                    double currentDistSq = relStart.normSq();
-
-                    if (currentDistSq < minDistSq && currentDistSq < 1e-12) {
-                        continue;
-                    }
-
-                    // Compute current particle velocities based on center of mass and angular velocity
-                    Vector2D rA = pA->pos - bodyA->getCenterOfMass();
-                    Vector2D rB = pB->pos - bodyB->getCenterOfMass();
-                    Vector2D vA = bodyA->getLinearVel() + Vector2D(-bodyA->getAngularVel() * rA.y, bodyA->getAngularVel() * rA.x);
-                    Vector2D vB = bodyB->getLinearVel() + Vector2D(-bodyB->getAngularVel() * rB.y, bodyB->getAngularVel() * rB.x);
-
-                    Vector2D relVelAtImpact = vA - vB;
+                    Vector2D relVelAtImpact = pA->vel - pB->vel;
                     Vector2D relVel = relVelAtImpact * dt;
+                    double aVal = relVel.normSq();
 
-                    double aVal = relVel.dot(relVel);
-                    bool intersectsDuringStep = false;
+                    bool isColliding = false;
                     Vector2D normal(0.0, 1.0);
 
-                    if (aVal > 1e-12) {
-                        double h = relStart.dot(relVel);
+                    // Continuous Collision Test (Swept Sphere-Sphere)
+                    if (aVal > 1e-12) 
+                    {
+                        double h = relPos.dot(relVel);
                         double cTerm = currentDistSq - minDistSq;
                         double disc = h * h - aVal * cTerm;
 
-                        if (disc >= 0.0) {
+                        if (disc >= 0.0) 
+                        {
                             double sqrtDisc = std::sqrt(disc);
                             double t1 = (-h - sqrtDisc) / aVal;
                             double t2 = (-h + sqrtDisc) / aVal;
 
-                            double firstValid = -1.0;
-                            if (t1 >= 0.0 && t1 <= 1.0) firstValid = t1;
-                            if (t2 >= 0.0 && t2 <= 1.0 && (firstValid < 0.0 || t2 < firstValid)) firstValid = t2;
+                            double tValid = -1.0;
+                            if (t1 >= 0.0 && t1 <= 1.0) tValid = t1;
+                            if (t2 >= 0.0 && t2 <= 1.0 && (tValid < 0.0 || t2 < tValid)) tValid = t2;
 
-                            if (firstValid >= 0.0) {
-                                Vector2D relAtImpact = relStart + relVel * firstValid;
+                            if (tValid >= 0.0) {
+                                Vector2D relAtImpact = relPos + relVel * tValid;
                                 double relLen = relAtImpact.norm();
                                 if (relLen > 1e-12) {
                                     normal = relAtImpact / relLen;
-                                    intersectsDuringStep = true;
+                                    isColliding = true;
                                 }
                             }
                         }
                     }
 
-                    if (!intersectsDuringStep && currentDistSq <= minDistSq) {
-                        double relLen = relStart.norm();
+                    // Fallback Static Overlap Test
+                    if (!isColliding && currentDistSq <= minDistSq) {
+                        double relLen = std::sqrt(currentDistSq);
                         if (relLen > 1e-12) {
-                            normal = relStart / relLen;
-                            intersectsDuringStep = true;
+                            normal = relPos / relLen;
+                            isColliding = true;
                         }
                     }
 
-                    if (!intersectsDuringStep) continue;
+                    if (!isColliding) continue;
 
+                    // Relative velocity along normal direction
                     double velAlongNormal = relVelAtImpact.dot(normal);
+
+                    // Skip if objects are moving apart and not overlapping
                     if (velAlongNormal >= 0.0 && currentDistSq > minDistSq) {
                         continue;
                     }
-
-                    if (currentDistSq < minFoundDistSq) {
-                        minFoundDistSq = currentDistSq;
-                        bestContact = {a, b, pIdxA, pIdxB, normal, currentDistSq, velAlongNormal};
-                        foundContact = true;
-                    }
+                    contacts.push_back({a, b, pA.get(), pB.get(), normal, currentDistSq, velAlongNormal});
                 }
             }
+        }
+        return contacts;
+    };
 
-            if (foundContact) {
-                bodyPairContacts.push_back(bestContact);
+    auto contacts = narrowPhaseDection(broadphasePairs, bodies, dt, params_.particleRadius);
+    if (contacts.empty()) {
+        return false;
+    }
+
+    auto applyPenaltyForces = [&](const std::vector<Contact>& contacts) {
+        double minOverlapDist = 2.0 * params_.particleRadius;
+
+        std::map<std::pair<size_t, size_t>, size_t> pairContactCounts;
+        for (const auto& contact : contacts) {
+            size_t minIdx = std::min(contact.bodyAIdx, contact.bodyBIdx);
+            size_t maxIdx = std::max(contact.bodyAIdx, contact.bodyBIdx);
+            pairContactCounts[{minIdx, maxIdx}]++;
+        }
+
+        // Relaxation factor: 0.01 to 0.05 resolves overlap smoothly over 20-100 steps
+        const double beta = 0.2; 
+        const double maxAccel = 1000.0; // Maximum allowed contact acceleration (m/s^2)
+
+        for (const auto& contact : contacts) {
+            size_t idxA = contact.bodyAIdx;
+            size_t idxB = contact.bodyBIdx;
+
+            const auto& cacheA = bodyCache[idxA];
+            const auto& cacheB = bodyCache[idxB];
+
+            // Lever arms relative to body COM
+            Vector2D rA = contact.pA->pos - bodies[idxA]->getCenterOfMass();
+            Vector2D rB = contact.pB->pos - bodies[idxB]->getCenterOfMass();
+
+            // 2D Cross product (r x n)
+            double rA_cross_n = rA.x * contact.normal.y - rA.y * contact.normal.x;
+            double rB_cross_n = rB.x * contact.normal.y - rB.y * contact.normal.x;
+
+            // Effective inverse mass along contact normal
+            double kNormal = cacheA.invMass + cacheB.invMass +
+                             (rA_cross_n * rA_cross_n) * cacheA.invInertia +
+                             (rB_cross_n * rB_cross_n) * cacheB.invInertia;
+
+            if (kNormal < 1e-12) continue; // Both bodies static
+
+            double effectiveMass = 1.0 / kNormal;
+
+            // Penetration depth
+            double currentDist = std::sqrt(contact.currentDistSq);
+            double penetration = minOverlapDist - currentDist;
+            if (penetration <= 0.0 && contact.velAlongNormal >= 0.0) continue;
+
+            // Get number of contacts sharing this body pair
+            size_t minIdx = std::min(idxA, idxB);
+            size_t maxIdx = std::max(idxA, idxB);
+            size_t numContacts = pairContactCounts[{minIdx, maxIdx}];
+
+            // 2. Scale stiffness by relaxation factor beta and divide by active contact count
+            double kSpring = params_.penaltyStiffness > 0.0 
+                             ? (params_.penaltyStiffness / numContacts)
+                             : (beta * effectiveMass / (dt * dt * numContacts));
+
+            double e = std::clamp(params_.restitution, 0.0, 1.0);
+            double logE = (e < 1e-4) ? -9.21 : std::log(e);
+            double dampingRatio = -logE / std::sqrt(M_PI * M_PI + logE * logE);
+            double cDamping = 2.0 * dampingRatio * std::sqrt(kSpring * (effectiveMass / numContacts));
+
+            // Spring-Damper Normal Force
+            double springForce = kSpring * std::max(0.0, penetration);
+            double dampingForce = -cDamping * contact.velAlongNormal;
+            double totalNormalForceMag = std::max(0.0, springForce + dampingForce);
+
+            // 3. Clamp force so max acceleration per contact does not explode
+            double maxForce = effectiveMass * maxAccel / numContacts;
+            totalNormalForceMag = std::min(totalNormalForceMag, maxForce);
+
+            Vector2D forceA = contact.normal * totalNormalForceMag;
+
+            // Apply equal and opposite reaction forces
+            if (!cacheA.isStatic) {
+                bodies[idxA]->addForceAtPosition(forceA, contact.pA->pos);
+            }
+            if (!cacheB.isStatic) {
+                bodies[idxB]->addForceAtPosition(-forceA, contact.pB->pos);
             }
         }
-    }
-    if (bodyPairContacts.empty()) return false;
+    };
 
-    // Pass 2: Calculate contact forces and record into forceAccumulator_
-    int collisions = 0;
-    for (const auto& contact : bodyPairContacts) {
-        size_t a = contact.bodyAIdx;
-        size_t b = contact.bodyBIdx;
-        auto& bodyA = bodies[a];
-        auto& bodyB = bodies[b];
-
-        double invMassA = bodyCache[a].invMass;
-        double invMassB = bodyCache[b].invMass;
-        double invInertiaA = bodyCache[a].invInertia;
-        double invInertiaB = bodyCache[b].invInertia;
-
-        const auto& pA = bodyA->getParticles()[contact.particleAIdx];
-        const auto& pB = bodyB->getParticles()[contact.particleBIdx];
-
-        Vector2D rA = pA->pos - bodyA->getCenterOfMass();
-        Vector2D rB = pB->pos - bodyB->getCenterOfMass();
-
-        double rACrossN = rA.x * contact.normal.y - rA.y * contact.normal.x;
-        double rBCrossN = rB.x * contact.normal.y - rB.y * contact.normal.x;
-
-        double effectiveMass = invMassA + invMassB + 
-                              (rACrossN * rACrossN) * invInertiaA + 
-                              (rBCrossN * rBCrossN) * invInertiaB;
-
-        if (effectiveMass > 0.0) {
-            double impulseMag = -(1.0 + params_.restitution) * contact.velAlongNormal / effectiveMass;
-            Vector2D impulse = contact.normal * impulseMag;
-
-            // Convert impulse to contact force over timestep dt and accumulate
-            Vector2D contactForce = impulse / dt;
-            bodyA->addForceAtPosition(contactForce, pA->pos);
-            bodyB->addForceAtPosition(-contactForce, pB->pos);
-
-            // Penetration position correction
-            double invMassSum = invMassA + invMassB;
-            if (invMassSum > 0.0) {
-                double dist = std::sqrt(contact.currentDistSq);
-                double penetration = std::max(0.0, minDist - dist);
-                if (penetration > 0.0) {
-                    Vector2D correction = contact.normal * (penetration / invMassSum);
-                    if (!bodyCache[a].isStatic) {
-                        bodyA->setCenterOfMass(bodyA->getCenterOfMass() + correction * invMassA);
-                        bodyA->updateParticlePositions();
-                    }
-                    if (!bodyCache[b].isStatic) {
-                        bodyB->setCenterOfMass(bodyB->getCenterOfMass() - correction * invMassB);
-                        bodyB->updateParticlePositions();
-                    }
-                }
-            }
-            collisions++;
-        }
-    }
-    return collisions > 0;
+    applyPenaltyForces(contacts);
+    return true;
 }
 
 void RigidBodySolver::integratePositions(std::vector<std::shared_ptr<RigidObject>>& bodies, double dt) {

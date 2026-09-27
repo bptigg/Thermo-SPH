@@ -8,6 +8,7 @@ struct RigidBodySolverParameters {
     Vector2D gravity = Vector2D(0.0, -9.81);
     double restitution = 0.1;
     double particleRadius = 0.05;
+    double penaltyStiffness = 0.0;
 };
 
 class RigidBodySolver {

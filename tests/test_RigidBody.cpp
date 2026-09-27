@@ -90,6 +90,56 @@ static bool testDamBreakWallRigidBodies() {
     return true;
 }
 
+static bool testDamDebrisFalling() {
+    DamBreakIC ic;
+    auto rigidBodies = ic.getRigidObjects();
+
+    TEST_ASSERT(!rigidBodies.empty(), "Dam-break scenario should create at least one rigid body");
+
+    bool hasStaticBoundary = false;
+    for (const auto& body : rigidBodies) {
+        if (body->isStatic() && body->getType() == RigidBodyType::EXTERNAL_BOUNDARY) {
+            hasStaticBoundary = true;
+            break;
+        }
+    }
+
+    bool hitFloor = false;
+    bool rebounded = false;
+
+    RigidBodySolver solver(RigidBodySolverParameters{
+        .enableGravity = true,
+        .gravity = Vector2D(0.0, -9.81),
+        .restitution = 0.1,
+        .particleRadius = 0.05
+    });
+
+    ThreadPool pool(4);
+    pool.start();
+
+    auto falling = rigidBodies[4];
+
+    for (int step = 0; step < 2000; ++step) {
+        //solver.solveCollisions(bodies, 0.01, pool);
+
+        double y = falling->getCenterOfMass().y;
+        double x = falling->getCenterOfMass().x;
+        std::cout << x << ", " << y << std::endl;
+
+        solver.integrate(rigidBodies, 0.01);
+
+        if (!hitFloor && y <= 0.05 && falling->getLinearVel().y < 0.0) {
+            hitFloor = true;
+        }
+        if (hitFloor && falling->getLinearVel().y > 0.0) {
+            rebounded = true;
+            break;
+        }
+    }
+
+    pool.Stop();
+}
+
 static bool testRigidBodySolverTwoBodyCollision() {
     RigidBodySolver solver(RigidBodySolverParameters{
         .enableGravity = false,
@@ -195,6 +245,7 @@ void registerRigidBodyTests(TestSuite& suite) {
     suite.runTest("Static Boundary Classification", testStaticBoundaryClassification);
     suite.runTest("AABB Overlap", testAABBOverlap);
     suite.runTest("DamBreak Wall Rigid Bodies", testDamBreakWallRigidBodies);
+    suite.runTest("DamBreak falling debris", testDamDebrisFalling);
     suite.runTest("RigidBodySolver Two-Body Collision", testRigidBodySolverTwoBodyCollision);
     suite.runTest("RigidBody Falls to Static Floor", testRigidBodyFallsToStaticFloor);
 }

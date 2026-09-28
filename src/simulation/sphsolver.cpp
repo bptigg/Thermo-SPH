@@ -10,6 +10,7 @@ double SPHSolver::computeSoundSpeed(double u, double gamma) const {
 }
 
 void SPHSolver::updateSmoothingLengths(std::vector<std::shared_ptr<Particle>>& fluidParticles) const {
+    //can mulitthread
     for (auto& p : fluidParticles) {
         double rho = std::max(p->density, 1e-5);
         p->h = params_.eta * std::sqrt(p->mass / rho);
@@ -23,6 +24,7 @@ void SPHSolver::computeDensityAndPressure(
     const SpatialGrid& grid,
     const Kernel& kernel) const 
 {
+    //can multithread 
     for (auto& p_i : fluidParticles) {
         p_i->density = 0.0;
         double h_i = p_i->h;
@@ -43,6 +45,7 @@ void SPHSolver::computeDensityAndPressure(
         }
 
         // 3. External Ghost Boundary Contributions
+        //this is wrong
         for (const auto& ghost : ghostParticles) {
             Vector2D r_ij = p_i->pos - ghost->pos;
             p_i->density += ghost->mass * kernel.value(r_ij, h_i);

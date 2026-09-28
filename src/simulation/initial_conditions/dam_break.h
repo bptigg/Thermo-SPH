@@ -6,9 +6,9 @@ public:
     struct Parameters {
         Vector2D domainMin = Vector2D(0.0, 0.0);
         Vector2D domainMax = Vector2D(5.0, 1.0);
-        int wallLayers = 3;
+        int wallLayers = 5;
         double spacing = 0.02;
-        double fluidDensity = 1.0;
+        double fluidDensity = 0.5;
         double initialInternalEnergy = 0.5;
 
         // Gravity Settings
@@ -16,7 +16,7 @@ public:
         Vector2D gravity = Vector2D(0.0, -9.81);
 
         // Fluid Column
-        Vector2D fluidBoxMin = Vector2D(0.04, 0.04);
+        Vector2D fluidBoxMin = Vector2D(0.04, 0.1);
         Vector2D fluidBoxMax = Vector2D(0.38, 0.70);
 
         // Static Dam Barrier Wall

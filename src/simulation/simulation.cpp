@@ -24,7 +24,11 @@ SimulationEngine::SimulationEngine(
         if (p->isFluid()) {
             fluidParticles_.push_back(p);
         }
+        else if (p->hasBoundary()) {
+            boundaryParticles_.push_back(p);
+        }
     }
+
 
     rigidObjects_ = initialConditions->getRigidObjects();
 
@@ -35,7 +39,7 @@ SimulationEngine::SimulationEngine(
     rigidSolver_.setParameters(rbParams);
 
     // 2. Classify rigid objects as EXTERNAL_BOUNDARY vs INTERNAL_OBJECT
-    classifyRigidBodies();
+    //classifyRigidBodies();
 
     // 3. Gather internal rigid body constituent particles
     std::vector<std::shared_ptr<Particle>> internalRigidParticles;
@@ -44,7 +48,7 @@ SimulationEngine::SimulationEngine(
     // 4. Initial SPH evaluation using 5-argument API
     solver_.updateSmoothingLengths(fluidParticles_);
     grid_.build(fluidParticles_);
-    ghosts_ = GhostManager::generateAllGhosts(fluidParticles_, config_.supportRadius);
+    ghosts_ = GhostManager::generateAllGhosts(boundaryParticles_, fluidParticles_, config_.supportRadius);
     
     solver_.computeDensityAndPressure(fluidParticles_, internalRigidParticles, ghosts_, grid_, *kernel_);
 }
@@ -96,7 +100,7 @@ void SimulationEngine::step() {
     grid_.build(fluidParticles_);
 
     // 3. Generate Ghost Particles for External Boundaries
-    ghosts_ = GhostManager::generateAllGhosts(fluidParticles_, config_.supportRadius);
+    ghosts_ = GhostManager::generateAllGhosts(boundaryParticles_, fluidParticles_, config_.supportRadius);
 
     // 4. Gather internal rigid body particles & clear object accumulators
     std::vector<std::shared_ptr<Particle>> internalRigidParticles;

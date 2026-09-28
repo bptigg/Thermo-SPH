@@ -15,7 +15,7 @@
 class SimulationEngine {
 public:
     struct Configuration {
-        double tFinal = 10.0;
+        double tFinal = 5.0;
         double initialDt = 1e-4;
         double supportRadius = 0.2;
 
@@ -63,6 +63,7 @@ private:
 
     std::vector<std::shared_ptr<Particle>> fluidParticles_;
     std::vector<std::shared_ptr<RigidObject>> rigidObjects_;
+    std::vector<std::shared_ptr<Particle>> boundaryParticles_;
     std::vector<std::shared_ptr<Particle>> ghosts_;
 
     double currentTime_ = 0.0;

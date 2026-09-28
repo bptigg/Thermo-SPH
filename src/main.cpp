@@ -319,7 +319,7 @@ int main() {
     // 3. Configure and Select Initial Conditions Scenario
     DamBreakIC::Parameters damParams;
     damParams.enableGravity = true;
-    damParams.gravity = Vector2D(0.0, -9.81);
+    damParams.gravity = Vector2D(0.0, -0.981);
 
     auto ic = std::make_unique<DamBreakIC>(damParams);
 
@@ -334,7 +334,7 @@ int main() {
     config.domainMin = damParams.domainMin;
     config.domainMax = damParams.domainMax;
 
-    size_t threadCount = 4;
+    size_t threadCount = 20;
 
     // 3. Create Engine
     SimulationEngine engine(config, solver, kernel, std::move(ic), threadCount);
@@ -377,12 +377,12 @@ int main() {
                       << "t = " << std::fixed << std::setprecision(4) << currentTime << "s";
 
             // Track dynamic rigid body Center of Mass if present in scene
-            if (!engine.getRigidObjects().empty()) {
-                const auto& body = engine.getRigidObjects()[4];
-                Vector2D com = body->getCenterOfMass();
-                std::cout << " | Rigid Body CoM: (" 
-                          << std::setprecision(3) << com.x << ", " << com.y << ")";
-            }
+            //if (!engine.getRigidObjects().empty()) {
+            //    const auto& body = engine.getRigidObjects()[4];
+            //    Vector2D com = body->getCenterOfMass();
+            //    std::cout << " | Rigid Body CoM: (" 
+            //              << std::setprecision(3) << com.x << ", " << com.y << ")";
+            //}
             std::cout << "\n";
 
             if (currentStep % 100 == 0) {

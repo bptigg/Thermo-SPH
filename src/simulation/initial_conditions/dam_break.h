@@ -8,8 +8,8 @@ public:
         Vector2D domainMax = Vector2D(5.0, 1.0);
         int wallLayers = 5;
         double spacing = 0.02;
-        double fluidDensity = 0.5;
-        double initialInternalEnergy = 0.5;
+        double fluidDensity = 1.0;
+        double initialInternalEnergy = 1.0;
 
         // Gravity Settings
         bool enableGravity = true;
@@ -17,11 +17,15 @@ public:
 
         // Fluid Column
         Vector2D fluidBoxMin = Vector2D(0.04, 0.1);
-        Vector2D fluidBoxMax = Vector2D(0.38, 0.70);
+        Vector2D fluidBoxMax = Vector2D(0.38, 0.90);
 
-        // Static Dam Barrier Wall
+        // Dam Barrier Wall
         Vector2D damPos = Vector2D(0.40, 0.0);
-        Vector2D damSize = Vector2D(0.04, 0.35);
+        Vector2D damSize = Vector2D(0.04, 0.2);
+        bool enableDamWallPivot = false;
+        double damWallRestoringStiffness = 0.0;
+        double damWallRestoringDamping = 0.0;
+        double damWallRestAngle = 0.0;
 
         // Domain Containment
         bool enableRightWall = true;

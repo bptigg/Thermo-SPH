@@ -19,6 +19,8 @@ public:
     void Resume();
     bool Busy();
     bool CheckBusyThreads();
+
+    void parallel_for(size_t start, size_t end, const std::function<void(size_t, size_t)>& func, size_t chunkSize = 256);
     
     // Wait until all queued jobs and active thread tasks are completed
     void waitFinished();
@@ -31,6 +33,7 @@ private:
     bool Paused = false;
     int m_BusyThreads = 0;
     bool Terminate = false;
+    bool Started = false;
 
     std::mutex m_Queue;
     std::mutex m_Busy;

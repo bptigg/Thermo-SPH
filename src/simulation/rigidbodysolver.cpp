@@ -16,22 +16,38 @@ void RigidBodySolver::integrateVelocities(std::vector<std::shared_ptr<RigidObjec
         }
 
         // Advance linear velocity from forceAccumulator_
-        Vector2D accel = body->getForceAccumulator() / body->getTotalMass();
-        if (body->isXLocked()) accel.x = 0.0;
-        if (body->isYLocked()) accel.y = 0.0;
+        if (!body->hasPivot()) {
+            Vector2D accel = body->getForceAccumulator() / body->getTotalMass();
+            if (body->isXLocked()) accel.x = 0.0;
+            if (body->isYLocked()) accel.y = 0.0;
 
-        Vector2D vel = body->getLinearVel() + accel * dt;
+            Vector2D vel = body->getLinearVel() + accel * dt;
 
-        if (body->isXLocked()) vel.x = 0.0;
-        if (body->isYLocked()) vel.y = 0.0;
-        body->setLinearVel(vel);
+            if (body->isXLocked()) vel.x = 0.0;
+            if (body->isYLocked()) vel.y = 0.0;
+            body->setLinearVel(vel);
+        }
 
         // Advance angular velocity from torqueAccumulator_
-        if (!body->isRotationLocked() && body->getInertia() > 0.0) {
-            double alpha = body->getTorqueAccumulator() / body->getInertia();
+        double inertia = body->hasPivot() ? body->getInertiaAboutPivot() : body->getInertia();
+        if (!body->isRotationLocked() && inertia > 0.0) {
+            double torque = body->getTorqueAccumulator() + body->getAngularSpringTorque();
+            if (body->hasPivot()) {
+                Vector2D pivotToCenter = body->getCenterOfMass() - body->getPivotPosition();
+                torque += pivotToCenter.x * body->getForceAccumulator().y -
+                          pivotToCenter.y * body->getForceAccumulator().x;
+            }
+            double alpha = torque / inertia;
             body->setAngularVel(body->getAngularVel() + alpha * dt);
+
+            if (body->hasPivot()) {
+                Vector2D pivotToCenter = body->getCenterOfMass() - body->getPivotPosition();
+                body->setLinearVel(Vector2D(-body->getAngularVel() * pivotToCenter.y,
+                                            body->getAngularVel() * pivotToCenter.x));
+            }
         } else {
             body->setAngularVel(0.0);
+            if (body->hasPivot()) body->setLinearVel(Vector2D(0.0, 0.0));
         }
     }
 }
@@ -56,9 +72,11 @@ bool RigidBodySolver::solveCollisions(std::vector<std::shared_ptr<RigidObject>>&
     for (size_t i = 0; i < numBodies; ++i) {
         const auto& body = bodies[i];
         bodyCache[i].isStatic = body->isStatic();
-        bodyCache[i].invMass = bodyCache[i].isStatic ? 0.0 : (1.0 / body->getTotalMass());
-        bodyCache[i].invInertia = (bodyCache[i].isStatic || body->isRotationLocked() || body->getInertia() <= 0.0)
-                                  ? 0.0 : (1.0 / body->getInertia());
+        bodyCache[i].invMass = (bodyCache[i].isStatic || body->hasPivot())
+            ? 0.0 : (1.0 / body->getTotalMass());
+        double inertia = body->hasPivot() ? body->getInertiaAboutPivot() : body->getInertia();
+        bodyCache[i].invInertia = (bodyCache[i].isStatic || body->isRotationLocked() || inertia <= 0.0)
+            ? 0.0 : (1.0 / inertia);
         bodyCache[i].aabb = body->getAABB();
 
         AABB swept = bodyCache[i].aabb;
@@ -68,6 +86,18 @@ bool RigidBodySolver::solveCollisions(std::vector<std::shared_ptr<RigidObject>>&
             swept.max.x = std::max(swept.max.x, swept.max.x + velDt.x);
             swept.min.y = std::min(swept.min.y, swept.min.y + velDt.y);
             swept.max.y = std::max(swept.max.y, swept.max.y + velDt.y);
+
+            if (body->hasPivot()) {
+                double maxRadius = 0.0;
+                for (const auto& particle : body->getParticles()) {
+                    maxRadius = std::max(maxRadius, (particle->pos - body->getPivotPosition()).norm());
+                }
+                double angularExpansion = maxRadius * std::abs(body->getAngularVel() * dt);
+                swept.min.x -= angularExpansion;
+                swept.max.x += angularExpansion;
+                swept.min.y -= angularExpansion;
+                swept.max.y += angularExpansion;
+            }
         }
         bodyCache[i].sweptAABB = swept;
     }
@@ -246,9 +276,11 @@ bool RigidBodySolver::solveCollisions(std::vector<std::shared_ptr<RigidObject>>&
             const auto& cacheA = bodyCache[idxA];
             const auto& cacheB = bodyCache[idxB];
 
-            // Lever arms relative to body COM
-            Vector2D rA = contact.pA->pos - bodies[idxA]->getCenterOfMass();
-            Vector2D rB = contact.pB->pos - bodies[idxB]->getCenterOfMass();
+            // Lever arms are measured from the active rotational constraint.
+            Vector2D rA = contact.pA->pos - (bodies[idxA]->hasPivot()
+                ? bodies[idxA]->getPivotPosition() : bodies[idxA]->getCenterOfMass());
+            Vector2D rB = contact.pB->pos - (bodies[idxB]->hasPivot()
+                ? bodies[idxB]->getPivotPosition() : bodies[idxB]->getCenterOfMass());
 
             // 2D Cross product (r x n)
             double rA_cross_n = rA.x * contact.normal.y - rA.y * contact.normal.x;
@@ -313,7 +345,9 @@ void RigidBodySolver::integratePositions(std::vector<std::shared_ptr<RigidObject
         if (body->isStatic()) continue;
 
         // Advance center of mass position
-        body->setCenterOfMass(body->getCenterOfMass() + body->getLinearVel() * dt);
+        if (!body->hasPivot()) {
+            body->setCenterOfMass(body->getCenterOfMass() + body->getLinearVel() * dt);
+        }
 
         // Advance rotation angle
         if (!body->isRotationLocked()) {
@@ -327,9 +361,9 @@ void RigidBodySolver::integratePositions(std::vector<std::shared_ptr<RigidObject
 
 bool RigidBodySolver::integrate(std::vector<std::shared_ptr<RigidObject>>& bodies, double dt) {
     // 1. Reset forces from the previous frame
-    for (auto& body : bodies) {
-        body->clearForces();
-    }
+    //for (auto& body : bodies) {
+    //    body->clearForces();
+    //}
 
     bool collided = solveCollisions(bodies, dt);
     integrateVelocities(bodies, dt);

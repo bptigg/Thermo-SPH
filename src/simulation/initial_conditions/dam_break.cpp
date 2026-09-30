@@ -30,11 +30,37 @@ void DamBreakIC::buildScenario() {
         generatedRigidObjects_.push_back(wallBody);
     };
 
+    auto registerDamWallBody = [&](std::vector<std::shared_ptr<Particle>>& wallParticles) {
+        if (wallParticles.empty()) return;
+
+        auto wallBody = std::make_shared<RigidObject>();
+        wallBody->setType(RigidBodyType::INTERNAL_OBJECT);
+        for (const auto& p : wallParticles) {
+            wallBody->addParticle(p);
+        }
+        wallBody->finalizeInitialization();
+        if (params_.enableDamWallPivot) {
+            wallBody->setConstraints(false, false, false);
+            wallBody->setPivot(Vector2D(
+                params_.damPos.x + 0.5 * params_.damSize.x,
+                params_.damPos.y
+            ));
+            wallBody->setAngularSpring(
+                params_.damWallRestoringStiffness,
+                params_.damWallRestoringDamping,
+                params_.damWallRestAngle
+            );
+        } else {
+            wallBody->setConstraints(true, true, true);
+        }
+        generatedRigidObjects_.push_back(wallBody);
+    };
+
     // -------------------------------------------------------------
     // 1. Static Bottom Floor Wall (placed in negative Y layers)
     // -------------------------------------------------------------
     std::vector<std::shared_ptr<Particle>> floorParticles;
-    double baseLayers = layers * 2;
+    double baseLayers = layers;
     for (double x = params_.domainMin.x - baseLayers * h; x <= params_.domainMax.x + baseLayers * h; x += h) {
         for (int layer = 1; layer <= baseLayers; ++layer) {
             double y = params_.domainMin.y - layer * h;
@@ -52,6 +78,7 @@ void DamBreakIC::buildScenario() {
         }
     }
     registerStaticWallBody(floorParticles, Vector2D(0.0, 1.0));
+    generatedRigidObjects_[0]->setType(RigidBodyType::EXTERNAL_BOUNDARY);
 
     // -------------------------------------------------------------
     // 2. Static Left Containment Wall (placed in negative X layers)
@@ -121,7 +148,7 @@ void DamBreakIC::buildScenario() {
             damParticles.push_back(damP);
         }
     }
-    registerStaticWallBody(damParticles, Vector2D(-1.0, 0.0));
+    registerDamWallBody(damParticles);
 
     // -------------------------------------------------------------
     // 5. Dynamic Fluid Column (collapses under gravity)

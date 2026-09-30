@@ -39,7 +39,7 @@ SimulationEngine::SimulationEngine(
     rigidSolver_.setParameters(rbParams);
 
     // 2. Classify rigid objects as EXTERNAL_BOUNDARY vs INTERNAL_OBJECT
-    //classifyRigidBodies();
+    classifyRigidBodies();
 
     // 3. Gather internal rigid body constituent particles
     std::vector<std::shared_ptr<Particle>> internalRigidParticles;
@@ -48,9 +48,10 @@ SimulationEngine::SimulationEngine(
     // 4. Initial SPH evaluation using 5-argument API
     solver_.updateSmoothingLengths(fluidParticles_);
     grid_.build(fluidParticles_);
-    ghosts_ = GhostManager::generateAllGhosts(boundaryParticles_, fluidParticles_, config_.supportRadius);
+    ghosts_ = GhostManager::generateAllGhosts(boundaryParticles_, fluidParticles_, config_.supportRadius, grid_, threadPool_);
     
     solver_.computeDensityAndPressure(fluidParticles_, internalRigidParticles, ghosts_, grid_, *kernel_);
+    solver_.computeDerivatives(fluidParticles_, internalRigidParticles, ghosts_, grid_, *kernel_);
 }
 
 void SimulationEngine::classifyRigidBodies() {
@@ -59,22 +60,22 @@ void SimulationEngine::classifyRigidBodies() {
     for (auto& obj : rigidObjects_) {
         obj->finalizeInitialization();
 
-        if (obj->isStatic()) {
-            AABB box = obj->getAABB();
-
-            bool touchesMinX = std::abs(box.min.x - config_.domainMin.x) < tolerance;
-            bool touchesMaxX = std::abs(box.max.x - config_.domainMax.x) < tolerance;
-            bool touchesMinY = std::abs(box.min.y - config_.domainMin.y) < tolerance;
-            bool touchesMaxY = std::abs(box.max.y - config_.domainMax.y) < tolerance;
-
-            if (touchesMinX || touchesMaxX || touchesMinY || touchesMaxY) {
-                obj->setType(RigidBodyType::EXTERNAL_BOUNDARY);
-            } else {
-                obj->setType(RigidBodyType::INTERNAL_OBJECT);
-            }
-        } else {
-            obj->setType(RigidBodyType::INTERNAL_OBJECT);
-        }
+        //if (obj->isStatic()) {
+        //    AABB box = obj->getAABB();
+//
+        //    bool touchesMinX = std::abs(box.min.x - config_.domainMin.x) < tolerance;
+        //    bool touchesMaxX = std::abs(box.max.x - config_.domainMax.x) < tolerance;
+        //    bool touchesMinY = std::abs(box.min.y - config_.domainMin.y) < tolerance;
+        //    bool touchesMaxY = std::abs(box.max.y - config_.domainMax.y) < tolerance;
+//
+        //    if (touchesMinX || touchesMaxX || touchesMinY || touchesMaxY) {
+        //        obj->setType(RigidBodyType::EXTERNAL_BOUNDARY);
+        //    } else {
+        //        obj->setType(RigidBodyType::INTERNAL_OBJECT);
+        //    }
+        //} else {
+        //    obj->setType(RigidBodyType::INTERNAL_OBJECT);
+        //}
     }
 }
 
@@ -94,13 +95,14 @@ void SimulationEngine::step() {
     // 1. First half kick & drift for fluid particles
     integrator_.kickFirstHalf(fluidParticles_, dt_, threadPool_);
     integrator_.drift(fluidParticles_, dt_, threadPool_);
+    threadPool_.waitFinished();
 
     // 2. Re-evaluate h_i & Grid
     solver_.updateSmoothingLengths(fluidParticles_);
     grid_.build(fluidParticles_);
 
     // 3. Generate Ghost Particles for External Boundaries
-    ghosts_ = GhostManager::generateAllGhosts(boundaryParticles_, fluidParticles_, config_.supportRadius);
+    ghosts_ = GhostManager::generateAllGhosts(boundaryParticles_, fluidParticles_, config_.supportRadius, grid_, threadPool_);
 
     // 4. Gather internal rigid body particles & clear object accumulators
     std::vector<std::shared_ptr<Particle>> internalRigidParticles;
@@ -117,8 +119,8 @@ void SimulationEngine::step() {
     // 7. Second half kick & Adaptive Timestep for Fluid Particles
     integrator_.kickSecondHalf(fluidParticles_, dt_, threadPool_);
 
-    dt_ = integrator_.computeAdaptiveTimestep(fluidParticles_, dt_);
     currentTime_ += dt_;
+    dt_ = integrator_.computeAdaptiveTimestep(fluidParticles_, dt_);
     currentStep_++;
 }
 

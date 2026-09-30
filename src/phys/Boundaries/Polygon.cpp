@@ -11,7 +11,8 @@ std::vector<std::shared_ptr<Particle>> PolygonBoundary::generateGhosts(
     const Vector2D& hostVel,
     double hostEnergy,
     const std::vector<std::shared_ptr<Particle>>& fluidParticles,
-    double supportRadius) const 
+    double supportRadius,
+    const SpatialGrid& grid) const
 {
     std::vector<std::shared_ptr<Particle>> ghosts;
     int ghostID = -1;

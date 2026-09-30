@@ -1,6 +1,7 @@
 #include "RigidBody.h"
 #include <cmath>
 #include <algorithm>
+#include <atomic>
 
 bool AABB::overlaps(const AABB& other) const {
     return !(max.x < other.min.x || min.x > other.max.x ||
@@ -47,17 +48,37 @@ void RigidObject::addForceAtPosition(const Vector2D& force, const Vector2D& worl
     if (lockX_) f.x = 0.0;
     if (lockY_) f.y = 0.0;
 
-    forceAccumulator_ += f;
+    std::atomic_ref<double> forceX(forceAccumulator_.x);
+    std::atomic_ref<double> forceY(forceAccumulator_.y);
+    forceX.fetch_add(f.x, std::memory_order_relaxed);
+    forceY.fetch_add(f.y, std::memory_order_relaxed);
+
+    //forceAccumulator_ += f;
 
     if (!lockRotation_) {
         Vector2D r = worldPos - centerOfMass_;
-        torqueAccumulator_ += (r.x * f.y - r.y * f.x);
+        double torque = (r.x * f.y - r.y * f.x);
+        
+        std::atomic_ref<double> torqueRef(torqueAccumulator_);
+        torqueRef.fetch_add(torque, std::memory_order_relaxed);
     }
 }
 
 void RigidObject::updateParticlePositions() {
     double cosA = std::cos(angle_);
     double sinA = std::sin(angle_);
+
+    if (pivotEnabled_) {
+        Vector2D rotatedPivotOffset(
+            cosA * pivotLocalOffset_.x - sinA * pivotLocalOffset_.y,
+            sinA * pivotLocalOffset_.x + cosA * pivotLocalOffset_.y
+        );
+        centerOfMass_ = pivotWorld_ - rotatedPivotOffset;
+        linearVel_ = Vector2D(
+            -angularVel_ * (centerOfMass_.y - pivotWorld_.y),
+            angularVel_ * (centerOfMass_.x - pivotWorld_.x)
+        );
+    }
 
     for (size_t i = 0; i < particles_.size(); ++i) {
         Vector2D rLocal = localOffsets_[i];
@@ -73,6 +94,18 @@ void RigidObject::updateParticlePositions() {
 }
 
 void RigidObject::applyImpulse(const Vector2D& impulse, const Vector2D& r) {
+    if (pivotEnabled_) {
+        double inertia = getInertiaAboutPivot();
+        if (!lockRotation_ && inertia > 0.0) {
+            Vector2D impulseArm = r + centerOfMass_ - pivotWorld_;
+            double angularImpulse = impulseArm.x * impulse.y - impulseArm.y * impulse.x;
+            angularVel_ += angularImpulse / inertia;
+            Vector2D pivotToCenter = centerOfMass_ - pivotWorld_;
+            linearVel_ = Vector2D(-angularVel_ * pivotToCenter.y, angularVel_ * pivotToCenter.x);
+        }
+        return;
+    }
+
     if (!lockX_ || !lockY_) {
         Vector2D linImpulse = impulse;
         if (lockX_) linImpulse.x = 0.0;
@@ -87,6 +120,37 @@ void RigidObject::applyImpulse(const Vector2D& impulse, const Vector2D& r) {
         double angularImpulse = r.x * impulse.y - r.y * impulse.x;
         angularVel_ += angularImpulse / inertia_;
     }
+}
+
+void RigidObject::setPivot(const Vector2D& worldPosition) {
+    pivotEnabled_ = true;
+    pivotWorld_ = worldPosition;
+
+    double cosA = std::cos(angle_);
+    double sinA = std::sin(angle_);
+    Vector2D pivotOffset = pivotWorld_ - centerOfMass_;
+    pivotLocalOffset_ = Vector2D(
+        cosA * pivotOffset.x + sinA * pivotOffset.y,
+        -sinA * pivotOffset.x + cosA * pivotOffset.y
+    );
+
+    Vector2D pivotToCenter = centerOfMass_ - pivotWorld_;
+    linearVel_ = Vector2D(-angularVel_ * pivotToCenter.y, angularVel_ * pivotToCenter.x);
+}
+
+double RigidObject::getInertiaAboutPivot() const {
+    return inertia_ + totalMass_ * (centerOfMass_ - pivotWorld_).normSq();
+}
+
+void RigidObject::setAngularSpring(double stiffness, double damping, double restAngle) {
+    angularSpringStiffness_ = std::max(0.0, stiffness);
+    angularSpringDamping_ = std::max(0.0, damping);
+    angularSpringRestAngle_ = restAngle;
+}
+
+double RigidObject::getAngularSpringTorque() const {
+    double angleError = std::remainder(angle_ - angularSpringRestAngle_, 2.0 * std::acos(-1.0));
+    return -angularSpringStiffness_ * angleError - angularSpringDamping_ * angularVel_;
 }
 
 AABB RigidObject::getAABB() const {

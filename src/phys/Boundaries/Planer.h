@@ -14,5 +14,6 @@ public:
         const Vector2D& hostVel,
         double hostEnergy,
         const std::vector<std::shared_ptr<Particle>>& fluidParticles,
-        double supportRadius) const override;
+        double supportRadius,
+        const SpatialGrid& grid) const override;
 };

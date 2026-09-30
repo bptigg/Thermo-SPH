@@ -1,5 +1,5 @@
 CXX      := g++
-CXXFLAGS := -std=c++17 -Wall -Wextra -pthread
+CXXFLAGS := -std=c++20 -Wall -Wextra -pthread
 
 TARGET_RELEASE := thermo_sph
 TARGET_DEBUG   := thermo_sph_debug

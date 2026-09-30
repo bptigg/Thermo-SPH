@@ -2,6 +2,7 @@
 #include <vector>
 #include <memory>
 #include "Vector2D.h"
+#include "SpatialGrid.h"
 
 class Particle;
 
@@ -15,5 +16,6 @@ public:
         const Vector2D& hostVel,
         double hostEnergy,
         const std::vector<std::shared_ptr<Particle>>& fluidParticles,
-        double supportRadius) const = 0;
+        double supportRadius,
+        const SpatialGrid& grid) const = 0;
 };

@@ -32,6 +32,13 @@ protected:
     double angle_ = 0.0;
     double angularVel_ = 0.0;
 
+    bool pivotEnabled_ = false;
+    Vector2D pivotWorld_{0.0, 0.0};
+    Vector2D pivotLocalOffset_{0.0, 0.0};
+    double angularSpringStiffness_ = 0.0;
+    double angularSpringDamping_ = 0.0;
+    double angularSpringRestAngle_ = 0.0;
+
     Vector2D forceAccumulator_{0.0, 0.0};
     double torqueAccumulator_ = 0.0;
 
@@ -55,6 +62,14 @@ public:
     void updateParticlePositions();
 
     void applyImpulse(const Vector2D& impulse, const Vector2D& r);
+
+    void setPivot(const Vector2D& worldPosition);
+    void clearPivot() { pivotEnabled_ = false; }
+    bool hasPivot() const { return pivotEnabled_; }
+    const Vector2D& getPivotPosition() const { return pivotWorld_; }
+    double getInertiaAboutPivot() const;
+    void setAngularSpring(double stiffness, double damping, double restAngle = 0.0);
+    double getAngularSpringTorque() const;
 
     AABB getAABB() const;
     void setConstraints(bool lockX, bool lockY, bool lockRotation);
@@ -84,5 +99,5 @@ public:
     bool isRotationLocked() const { return lockRotation_; }
     bool isXLocked() const { return lockX_; }
     bool isYLocked() const { return lockY_; }
-    virtual bool isStatic() const { return lockX_ && lockY_ && lockRotation_; }
+    virtual bool isStatic() const { return (lockX_ && lockY_ && lockRotation_) || (pivotEnabled_ && lockRotation_); }
 };

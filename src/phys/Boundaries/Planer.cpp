@@ -13,18 +13,32 @@ std::vector<std::shared_ptr<Particle>> PlanarBoundary::generateGhosts(
     const Vector2D& hostVel,
     double hostEnergy,
     const std::vector<std::shared_ptr<Particle>>& fluidParticles,
-    double supportRadius) const 
+    double supportRadius,
+    const SpatialGrid& grid) const
 {
     std::vector<std::shared_ptr<Particle>> ghosts;
+
+    std::vector<size_t> candidateIndices;
+    candidateIndices = grid.getNeighborIndices(hostPos);
+
+
     int ghostID = -1;
 
-    for (const auto& fluid : fluidParticles) {
+    for (size_t idx : candidateIndices) {
+        if (idx >= fluidParticles.size()) continue;
+        const auto& fluid = fluidParticles[idx];
         if (!fluid->isFluid()) continue;
 
         Vector2D relPos = fluid->pos - hostPos;
         double dist = relPos.dot(normal_);
 
-        if (dist > 0.0 && dist < supportRadius) {
+        if (dist > -0.5 * supportRadius && dist < supportRadius) 
+        {
+        
+            if (std::abs(dist) < 1e-5) {
+                dist = (dist < 0.0) ? -1e-5 : 1e-5;
+            }
+
             Vector2D ghostPos = fluid->pos - normal_ * (2.0 * dist);
             Vector2D ghostVel;
 
@@ -36,7 +50,7 @@ std::vector<std::shared_ptr<Particle>> PlanarBoundary::generateGhosts(
                 ghostVel = fluid->vel - normal_ * (2.0 * vRelNorm);
             }
 
-            ghosts.push_back(std::make_unique<FluidParticle>(
+            ghosts.push_back(std::make_shared<FluidParticle>(
                 ghostID--, ghostPos, ghostVel, fluid->mass, fluid->density, hostEnergy
             ));
         }

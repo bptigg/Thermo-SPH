@@ -14,14 +14,15 @@ enum class MotionType
 };
 
 class RigidObject;
+class SpatialGrid;
 
 class Particle 
 {
 public:
     int id;
-    Vector2D pos;
-    Vector2D vel;
-    Vector2D accel;
+    Vector2D pos{0.0, 0.0};
+    Vector2D vel{0.0, 0.0};
+    Vector2D accel{0.0, 0.0};
 
     double mass = 0.0;
     double density = 0.0;
@@ -62,10 +63,10 @@ public:
 
     std::vector<std::shared_ptr<Particle>> generateGhosts(
         const std::vector<std::shared_ptr<Particle>>& fluidParticles, 
-        double supportRadius) const 
+        double supportRadius, const SpatialGrid& grid) const 
     {
         if (!boundaryComponent_) return {};
-        return boundaryComponent_->generateGhosts(pos, vel, u, fluidParticles, supportRadius);
+        return boundaryComponent_->generateGhosts(pos, vel, u, fluidParticles, supportRadius, grid);
     }
 
     Vector2D getMomentum() const { 

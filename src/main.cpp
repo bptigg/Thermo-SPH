@@ -309,32 +309,45 @@ int main() {
     // 1. Configure SPH Solver Parameters
     Parameters solverParams;
     solverParams.gamma = 1.4; // Ratio of specific heats for ideal gas
-    solverParams.alpha = 1.0; // Artificial viscosity alpha coefficient
-    solverParams.beta  = 2.0; // Artificial viscosity beta coefficient
+    solverParams.alpha = 0.5; // Artificial viscosity alpha coefficient
+    solverParams.beta  = 1.0; // Artificial viscosity beta coefficient
     solverParams.eta   = 1.3; // Scale factor for adaptive smoothing length (h_i)
 
     // 2. Instantiate Concrete Kernel (passed via shared_ptr for polymorphic Kernel base)
     auto kernel = std::make_shared<CubicSplineKernel>();
 
-    // 3. Configure and Select Initial Conditions Scenario
-    DamBreakIC::Parameters damParams;
-    damParams.enableGravity = true;
-    damParams.gravity = Vector2D(0.0, -0.981);
+    //auto ic = std::make_unique<DamBreakIC>(damParams);
+    //ThermalEquilibriumIC::Parameters TEp;
+    //auto ic = std::make_unique<ThermalEquilibriumIC>(TEp);
 
+    DamBreakIC::Parameters damParams;
+    damParams.enableDamWallPivot = true;
+    damParams.gravity = Vector2D(0.0, -0.981);
+    damParams.damWallRestoringStiffness = 0.01;
+    damParams.damWallRestoringDamping = 0.002;
     auto ic = std::make_unique<DamBreakIC>(damParams);
 
     solverParams.enableGravity = damParams.enableGravity;
     solverParams.gravity = damParams.gravity;
-    SPHSolver solver(solverParams);
+
+    size_t threadCount = 40;
+    auto pool = std::make_shared<ThreadPool>(threadCount);
+    auto liquidEOS = std::make_shared<TaitEOS>(1.0 /*rho0*/, 20.0 /*soundSpeed0*/, 7.0 /*gamma*/);
+    //auto GAS = std::make_shared<IdealGasEOS>(1.4);
+    SPHSolver solver(solverParams, liquidEOS);
+    solver.addThreadPool(pool);
 
     // 2. Configure Simulation Engine with Gravity
     SimulationEngine::Configuration config;
+    //config.enableGravity = false;
+    //config.gravity = Vector2D(0.0,0.0);
+    //config.domainMin = TEp.domainMin;
+    //config.domainMax = TEp.domainMax;
     config.enableGravity = damParams.enableGravity;
     config.gravity = damParams.gravity;
     config.domainMin = damParams.domainMin;
     config.domainMax = damParams.domainMax;
 
-    size_t threadCount = 20;
 
     // 3. Create Engine
     SimulationEngine engine(config, solver, kernel, std::move(ic), threadCount);
@@ -350,7 +363,7 @@ int main() {
 
     SystemAggregator logger("output/metrics.csv", "output/frames");
     double nextFrameTime = 0.0;
-    double frameInterval = 1.0 / 60.0; // 60 FPS frame export
+    double frameInterval = 1.0 / 120.0; // 60 FPS frame export
     size_t frameIdx = 0;
 
     engine.getThreadPool().start();

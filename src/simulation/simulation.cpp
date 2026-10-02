@@ -17,6 +17,7 @@ SimulationEngine::SimulationEngine(
       dt_(config.initialDt)
 {
     threadPool_.start();
+    solver_.setThermalNoiseEnabled(config_.enableThermalNoise);
     
     // Filter out fluid particles from initial conditions
     auto allParticles = initialConditions->generateParticles();
@@ -51,7 +52,7 @@ SimulationEngine::SimulationEngine(
     ghosts_ = GhostManager::generateAllGhosts(boundaryParticles_, fluidParticles_, config_.supportRadius, grid_, threadPool_);
     
     solver_.computeDensityAndPressure(fluidParticles_, internalRigidParticles, ghosts_, grid_, *kernel_);
-    solver_.computeDerivatives(fluidParticles_, internalRigidParticles, ghosts_, grid_, *kernel_);
+    solver_.computeDerivatives(fluidParticles_, internalRigidParticles, ghosts_, grid_, *kernel_, dt_, 0);
 }
 
 void SimulationEngine::classifyRigidBodies() {
@@ -110,7 +111,7 @@ void SimulationEngine::step() {
 
     // 5. SPH Thermodynamics & Fluid Forces (5 arguments matching SPHSolver)
     solver_.computeDensityAndPressure(fluidParticles_, internalRigidParticles, ghosts_, grid_, *kernel_);
-    solver_.computeDerivatives(fluidParticles_, internalRigidParticles, ghosts_, grid_, *kernel_);
+    solver_.computeDerivatives(fluidParticles_, internalRigidParticles, ghosts_, grid_, *kernel_, dt_, currentStep_ + 1);
 
     // 6. Solid-Solid Collisions & Newton-Euler Integration
     //rigidSolver_.solveCollisions(rigidObjects_, dt_, threadPool_);

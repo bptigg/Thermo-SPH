@@ -18,6 +18,7 @@ public:
         double tFinal = 1000.0;
         double initialDt = 1e-4;
         double supportRadius = 0.2;
+        bool enableThermalNoise = false;
 
         // Bounding box for domain classification
         Vector2D domainMin = Vector2D(0.0, 0.0);

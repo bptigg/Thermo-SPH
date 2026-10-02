@@ -3,6 +3,22 @@
 #include <cmath>
 #include <algorithm>
 #include <atomic> // Required for std::atomic_ref (C++20)
+#include <cstdint>
+#include <random>
+
+namespace {
+double samplePairGaussian(int idI, int idJ, std::uint64_t sampleIndex) {
+    std::seed_seq seed{
+        static_cast<std::uint32_t>(idI),
+        static_cast<std::uint32_t>(idJ),
+        static_cast<std::uint32_t>(sampleIndex),
+        static_cast<std::uint32_t>(sampleIndex >> 32)
+    };
+    std::mt19937 rng(seed);
+    std::normal_distribution<double> gaussian(0.0, 1.0);
+    return gaussian(rng);
+}
+}
 
 SPHSolver::SPHSolver(Parameters params, std::shared_ptr<EquationOfState> eos) 
     :params_(params), eos_(std::move(eos))
@@ -128,7 +144,9 @@ void SPHSolver::computeDerivatives(
     const std::vector<std::shared_ptr<Particle>>& internalRigidParticles,
     const std::vector<std::shared_ptr<Particle>>& ghostParticles,
     const SpatialGrid& grid,
-    const Kernel& kernel) const
+    const Kernel& kernel,
+    double dt,
+    std::uint64_t noiseSample) const
 {
     size_t n = fluidParticles.size();
 
@@ -187,6 +205,32 @@ void SPHSolver::computeDerivatives(
                 double cond_term = (alpha_u * v_u_ij / rho_ij) * (u_i - u_j) * 
                                    (r_ij.dot(gradW_ij) / (r2 + 0.01 * h_ij * h_ij));
 
+                Vector2D sdpdForce(0.0, 0.0);
+                double sdpdWork = 0.0;
+                if (enableThermalNoise_ && r2 > 1e-24 && params_.thermalViscosity > 0.0 &&
+                    rho_i > 0.0 && rho_j > 0.0 && p_i->mass > 0.0 && p_j->mass > 0.0) {
+                    double r = std::sqrt(r2);
+                    Vector2D direction = r_ij / r;
+                    double dWdr = gradW_ij.dot(direction);
+                    double viscosityWeight = params_.thermalViscosity *
+                        (p_i->mass * p_j->mass / (rho_i * rho_j)) * (-dWdr / r);
+                    double temperature = 0.5 * (eos_->computeTemperature(u_i) + eos_->computeTemperature(u_j));
+
+                    if (viscosityWeight > 0.0 && std::isfinite(viscosityWeight)) {
+                        double friction = 2.0 * viscosityWeight;
+                        sdpdForce = direction * (-friction * v_ij.dot(direction));
+
+                        double amplitudeSquared = 2.0 * params_.boltzmannConstant * temperature * friction;
+                        if (dt > 0.0 && params_.boltzmannConstant > 0.0 &&
+                            amplitudeSquared > 0.0 && std::isfinite(amplitudeSquared)) {
+                            double amplitude = std::sqrt(amplitudeSquared);
+                            double gaussian = samplePairGaussian(p_i->id, p_j->id, noiseSample);
+                            sdpdForce += direction * (amplitude * gaussian / std::sqrt(dt));
+                        }
+                        sdpdWork = 0.5 * sdpdForce.dot(v_ij);
+                    }
+                }
+
                 std::atomic_ref<double> ax_i(p_i->accel.x), ay_i(p_i->accel.y);
                 std::atomic_ref<double> ax_j(p_j->accel.x), ay_j(p_j->accel.y);
                 std::atomic_ref<double> du_i(p_i->dudt), du_j(p_j->dudt);
@@ -196,8 +240,15 @@ void SPHSolver::computeDerivatives(
                 ax_j.fetch_sub(force_ij.x / p_j->mass, std::memory_order_relaxed);
                 ay_j.fetch_sub(force_ij.y / p_j->mass, std::memory_order_relaxed);
 
+                ax_i.fetch_add(sdpdForce.x / p_i->mass, std::memory_order_relaxed);
+                ay_i.fetch_add(sdpdForce.y / p_i->mass, std::memory_order_relaxed);
+                ax_j.fetch_sub(sdpdForce.x / p_j->mass, std::memory_order_relaxed);
+                ay_j.fetch_sub(sdpdForce.y / p_j->mass, std::memory_order_relaxed);
+
                 du_i.fetch_add(p_j->mass * (thermal_ij + cond_term), std::memory_order_relaxed);
                 du_j.fetch_add(p_i->mass * (thermal_ij - cond_term), std::memory_order_relaxed);
+                du_i.fetch_sub(sdpdWork / p_i->mass, std::memory_order_relaxed);
+                du_j.fetch_sub(sdpdWork / p_j->mass, std::memory_order_relaxed);
             }
         }
     });

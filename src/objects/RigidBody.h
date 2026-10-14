@@ -56,7 +56,16 @@ public:
     void clearForces();
     
     // Accumulates force at a specific constituent particle position
-    void addForceAtPosition(const Vector2D& force, const Vector2D& worldPos);
+    virtual void addForceAtPosition(const Vector2D& force, const Vector2D& worldPos);
+
+    // Called once per step after fluid forces are accumulated and before rigid integration
+    virtual void preStep(double /*time*/, double /*dt*/) {}
+
+    // Hard no-penetration backstop applied to fluid particles after they drift
+    virtual void constrainFluid(const std::vector<std::shared_ptr<Particle>>& /*fluid*/) {}
+
+    // Bodies returning false are skipped by the rigid-rigid contact solver
+    virtual bool participatesInCollisions() const { return true; }
     
     // Synchronizes all constituent particles to the current center of mass and rotation angle
     void updateParticlePositions();
@@ -100,4 +109,8 @@ public:
     bool isXLocked() const { return lockX_; }
     bool isYLocked() const { return lockY_; }
     virtual bool isStatic() const { return (lockX_ && lockY_ && lockRotation_) || (pivotEnabled_ && lockRotation_); }
+
+    virtual double getThermalTriggerValue() const {
+        return centerOfMass_.y;
+    }
 };

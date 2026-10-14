@@ -19,6 +19,8 @@
 #include "phys/Integrator/kernel.h"
 
 #include "simulation/initial_conditions/dam_break.h"
+#include "simulation/initial_conditions/piston_compression.h"
+#include "simulation/initial_conditions/explosion.h"
 #include "simulation/initial_conditions/sod_shock_tube.h"
 #include "simulation/initial_conditions/thermal_equilibrium.h"
 
@@ -312,6 +314,7 @@ int main() {
     solverParams.alpha = 0.5; // Artificial viscosity alpha coefficient
     solverParams.beta  = 1.0; // Artificial viscosity beta coefficient
     solverParams.eta   = 1.3; // Scale factor for adaptive smoothing length (h_i)
+    solverParams.thermal = 2.0; // Thermal conduction coefficient
 
     // 2. Instantiate Concrete Kernel (passed via shared_ptr for polymorphic Kernel base)
     auto kernel = std::make_shared<CubicSplineKernel>();
@@ -320,21 +323,75 @@ int main() {
     //ThermalEquilibriumIC::Parameters TEp;
     //auto ic = std::make_unique<ThermalEquilibriumIC>(TEp);
 
-    DamBreakIC::Parameters damParams;
-    damParams.enableDamWallPivot = true;
-    damParams.gravity = Vector2D(0.0, -0.981);
-    damParams.damWallRestoringStiffness = 0.01;
-    damParams.damWallRestoringDamping = 0.002;
-    auto ic = std::make_unique<DamBreakIC>(damParams);
+    //DamBreakIC::Parameters damParams;
+    //damParams.enableDamWallPivot = true;
+    //damParams.gravity = Vector2D(0.0, -0.981);
+    //damParams.damWallRestoringStiffness = 0.01;
+    //damParams.damWallRestoringDamping = 0.002;
+    //auto ic = std::make_unique<DamBreakIC>(damParams);
 
-    solverParams.enableGravity = damParams.enableGravity;
-    solverParams.gravity = damParams.gravity;
+    enum class Scenario { PistonCompression, Explosion, PistonEngine, FlywheelEngine };
+    const Scenario scenario = Scenario::FlywheelEngine; // Change this to select different scenarios
+
+    PistonCompressionIC::Parameters damParams;
+    damParams.driveMode = PistonCompressionIC::DriveMode::ConstantForce;
+    ExplosionIC::Parameters blastParams;
+
+    std::unique_ptr<InitialConditions> ic;
+    double gasGamma = damParams.gamma;
+    bool gravityEnabled = damParams.enableGravity;
+    Vector2D gravityVector = damParams.gravity;
+    Vector2D domainMin = damParams.domainMin, domainMax = damParams.domainMax;
+    double tFinal = 1000.0;
+    double initialDt = 1e-4;
+    double frameRate = 12000.0; // exported frames per simulated second
+    if (scenario == Scenario::Explosion) {
+        ic = std::make_unique<ExplosionIC>(blastParams);
+        gasGamma = blastParams.gamma;
+        gravityEnabled = blastParams.enableGravity;
+        gravityVector = blastParams.gravity;
+        domainMin = blastParams.domainMin;
+        domainMax = blastParams.domainMax;
+        tFinal = 0.1;
+        initialDt = 1e-8;   // the first step already sees a 2000x energy jump
+        frameRate = 3000.0; // the blast crosses the box in a few ms
+        solverParams.thermal = 0.5;
+    } else if (scenario == Scenario::PistonEngine) {
+        // A heavy load squeezes and heats the gas; the gas then pushes the piston back up.
+        // The power take-off siphons work out of the piston on every stroke.
+        damParams.constantForceFactor = 1.5;
+        damParams.pistonCeilingAboveStart = 0.25;
+        damParams.powerTakeOff = 0.15;
+        ic = std::make_unique<PistonCompressionIC>(damParams);
+        tFinal = 10.0;
+        frameRate = 120.0;
+        solverParams.thermal = 0.5;
+    } else if (scenario == Scenario::FlywheelEngine) {
+        // Slider-crank engine: the flywheel compresses the gas, heat added near the bottom of the stroke
+        // raises the pressure, and the gas drives the flywheel round again. The shaft generator siphons work.
+        damParams.driveMode = PistonCompressionIC::DriveMode::Flywheel;
+        damParams.crankRadius = 0.12;
+        damParams.flywheelInertia = 0.02;
+        damParams.flywheelInitialOmega = 3.0;
+        damParams.shaftDamping = 0.000;
+        damParams.loadFactor =0.0;
+        damParams.constantForceFactor = 0.0;
+        ic = std::make_unique<PistonCompressionIC>(damParams);
+        tFinal = 20.0;
+        frameRate = 120.0;
+        solverParams.thermal = 0.5;
+    } else {
+        ic = std::make_unique<PistonCompressionIC>(damParams);
+    }
+
+    solverParams.enableGravity = gravityEnabled;
+    solverParams.gravity = gravityVector;
 
     size_t threadCount = 40;
     auto pool = std::make_shared<ThreadPool>(threadCount);
-    auto liquidEOS = std::make_shared<TaitEOS>(1.0 /*rho0*/, 20.0 /*soundSpeed0*/, 7.0 /*gamma*/);
-    //auto GAS = std::make_shared<IdealGasEOS>(1.4);
-    SPHSolver solver(solverParams, liquidEOS);
+    //auto liquidEOS = std::make_shared<TaitEOS>(1.0 /*rho0*/, 20.0 /*soundSpeed0*/, 7.0 /*gamma*/);
+    auto GAS = std::make_shared<IdealGasEOS>(gasGamma);
+    SPHSolver solver(solverParams, GAS);
     solver.addThreadPool(pool);
 
     // 2. Configure Simulation Engine with Gravity
@@ -343,10 +400,30 @@ int main() {
     //config.gravity = Vector2D(0.0,0.0);
     //config.domainMin = TEp.domainMin;
     //config.domainMax = TEp.domainMax;
-    config.enableGravity = damParams.enableGravity;
-    config.gravity = damParams.gravity;
-    config.domainMin = damParams.domainMin;
-    config.domainMax = damParams.domainMax;
+    config.enableGravity = gravityEnabled;
+    config.gravity = gravityVector;
+    config.domainMin = domainMin;
+    config.domainMax = domainMax;
+    config.tFinal = tFinal;
+    config.initialDt = initialDt;
+
+    // Heat bath touching the walls; colder than the gas so it removes heat and damps the piston bounce
+    const bool useThermalBath = scenario != Scenario::Explosion;
+    const double bathInternalEnergy = scenario == Scenario::PistonEngine ? damParams.gasInternalEnergy : 0.3;
+    config.bath.enabled = useThermalBath;
+    config.bath.targetU = bathInternalEnergy;
+    config.bath.tau = 0.7;
+    config.bath.wallThickness = 0.15;
+    if (scenario == Scenario::FlywheelEngine) {
+        // Cold sink most of the cycle, heat source only while the piston is near the bottom of its stroke
+        config.bath.targetU = 0.4;
+        config.bath.tau = 0.1;
+        config.bath.hotU = 1.5;
+        config.bath.hotBelowY = 0.6;//0.65;// - 2.0 * damParams.crankRadius + 0.06;
+        std::cout<< "Bath hot region below y = " << config.bath.hotBelowY << "\n";
+        config.bath.mode = BathMode::HOT_ONLY;
+    }
+
 
 
     // 3. Create Engine
@@ -361,9 +438,33 @@ int main() {
     double logInterval = 0.05;  // Print output every 0.05 physical seconds
     double nextLogTime = 0.0;
 
-    SystemAggregator logger("output/metrics.csv", "output/frames");
+    std::string runName = "piston_engine";
+    if (scenario == Scenario::Explosion) runName = "explosion";
+    else if (scenario == Scenario::FlywheelEngine) runName = "flywheel_engine";
+
+    std::string metricsPath = "output/" + runName + "/metrics.csv";
+    std::string framesDir = "output/" + runName + "/frames";
+    std::string bathPath = "output/" + runName + "/bath.csv";
+
+    SystemAggregator logger(metricsPath, framesDir);
+    {
+        // Read by animate.py to draw the bath region
+       std::ofstream bathFile(bathPath);
+        bathFile << "enabled,target_u,tau,wall_thickness,xmin,ymin,xmax,ymax,hot_u,hot_below_y,mode\n"
+                 << config.bath.enabled << "," 
+                 << config.bath.targetU << "," 
+                 << config.bath.tau << ","
+                 << config.bath.wallThickness << "," 
+                 << config.domainMin.x << "," 
+                 << config.domainMin.y << ","
+                 << config.domainMax.x << "," 
+                 << config.domainMax.y << ","
+                 << config.bath.hotU << "," 
+                 << config.bath.hotBelowY << "," 
+                 << static_cast<int>(config.bath.mode) << "\n";
+    }
     double nextFrameTime = 0.0;
-    double frameInterval = 1.0 / 120.0; // 60 FPS frame export
+    double frameInterval = 1.0 / frameRate;
     size_t frameIdx = 0;
 
     engine.getThreadPool().start();
@@ -380,14 +481,29 @@ int main() {
 
         // 2. Export Visualization Frame (Unnested: runs every step to catch precise 60 FPS target times)
         if (currentTime >= nextFrameTime) {
-            logger.exportFrameCSV(frameIdx++, engine.getParticles(), engine.getRigidObjects());
+            logger.exportFrameCSV(frameIdx, engine.getParticles(), engine.getRigidObjects());
+            logger.exportActiveGridCSV(frameIdx, engine.getSpatialGrid()); // Export C++ ground-truth grid
+            logger.exportBathFrameCSV(frameIdx, currentTime, engine.getThermalBath());
+            frameIdx++;
             nextFrameTime += frameInterval;
         }
 
         // 3. Console Terminal Output & Summary Print
         if (currentTime >= nextLogTime) {
             std::cout << "[Step " << std::setw(6) << currentStep << "] "
-                      << "t = " << std::fixed << std::setprecision(4) << currentTime << "s";
+                      << "t = " << std::fixed << std::setprecision(4) << currentTime << "s"
+                      << " | bath heat = " << std::setprecision(5) << engine.getBathHeat()
+                      << " | bath active u = " << std::setprecision(5) << engine.getCurrentActiveU();
+            for (const auto& body : engine.getRigidObjects()) {
+                if (auto piston = std::dynamic_pointer_cast<Piston>(body)) {
+                    std::cout << " | piston y = " << std::setprecision(3) << piston->getCenterOfMass().y
+                              << " | harvested = " << std::setprecision(5) << piston->getHarvestedEnergy();
+                    if (piston->hasFlywheel()) {
+                        std::cout << " | omega = " << std::setprecision(3) << piston->getFlywheelOmega()
+                                  << " | flywheel E = " << std::setprecision(5) << piston->getFlywheelEnergy();
+                    }
+                }
+            }
 
             // Track dynamic rigid body Center of Mass if present in scene
             //if (!engine.getRigidObjects().empty()) {

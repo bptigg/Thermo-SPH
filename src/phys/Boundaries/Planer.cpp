@@ -1,8 +1,8 @@
 #include "Planer.h"
 #include "Particle.h"
 
-PlanarBoundary::PlanarBoundary(Vector2D normal, bool isNoSlip)
-    : isNoSlip_(isNoSlip) 
+PlanarBoundary::PlanarBoundary(Vector2D normal, bool isNoSlip, double spacing, double surfaceOffset)
+    : isNoSlip_(isNoSlip), spacing_(spacing), surfaceOffset_(surfaceOffset)
 {
     double len = normal.norm();
     normal_ = (len > 0.0) ? normal / len : Vector2D(0.0, 1.0);
@@ -11,7 +11,7 @@ PlanarBoundary::PlanarBoundary(Vector2D normal, bool isNoSlip)
 std::vector<std::shared_ptr<Particle>> PlanarBoundary::generateGhosts(
     const Vector2D& hostPos,
     const Vector2D& hostVel,
-    double hostEnergy,
+    double /*hostEnergy*/,
     const std::vector<std::shared_ptr<Particle>>& fluidParticles,
     double supportRadius,
     const SpatialGrid& grid) const
@@ -32,6 +32,14 @@ std::vector<std::shared_ptr<Particle>> PlanarBoundary::generateGhosts(
         Vector2D relPos = fluid->pos - hostPos;
         double dist = relPos.dot(normal_);
 
+        if (spacing_ > 0.0) {
+            Vector2D tangent(-normal_.y, normal_.x);
+            double lateral = relPos.dot(tangent);
+            const double halfSpan = 0.5 * spacing_;
+            if (lateral < -halfSpan - 1e-9 || lateral >= halfSpan - 1e-9) continue;
+            dist -= surfaceOffset_;
+        }
+
         if (dist > -0.5 * supportRadius && dist < supportRadius) 
         {
         
@@ -51,8 +59,9 @@ std::vector<std::shared_ptr<Particle>> PlanarBoundary::generateGhosts(
             }
 
             ghosts.push_back(std::make_shared<FluidParticle>(
-                ghostID--, ghostPos, ghostVel, fluid->mass, fluid->density, hostEnergy
+                ghostID--, ghostPos, ghostVel, fluid->mass, fluid->density, fluid->u
             ));
+            ghosts.back()->h = fluid->h;
         }
     }
 

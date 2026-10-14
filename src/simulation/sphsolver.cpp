@@ -70,7 +70,7 @@ void SPHSolver::computeDensityAndPressure(
         }
     });
 
-    auto applyBoundaryDensity = [&](const std::vector<std::shared_ptr<Particle>>& boundaries) {
+    auto applyBoundaryDensity = [&](const std::vector<std::shared_ptr<Particle>>& boundaries, bool isRigid) {
         threadPool_->parallel_for(0, boundaries.size(), [&](size_t start, size_t end) {
             for (size_t b = start; b < end; ++b) {
                 const auto& bp = boundaries[b];
@@ -81,7 +81,8 @@ void SPHSolver::computeDensityAndPressure(
                     auto& p_i = fluidParticles[idx];
 
                     Vector2D r_ij = p_i->pos - bp->pos;
-                    double mass_contrib = bp->mass * kernel.value(r_ij, p_i->h);
+                    // Rigid particles count as fluid-mass lattice points (Adami et al. 2012), not their own mass
+                    double mass_contrib = (isRigid ? p_i->mass : bp->mass) * kernel.value(r_ij, p_i->h);
 
                     if (mass_contrib > 0.0) {
                         std::atomic_ref<double> density_ref(p_i->density);
@@ -93,8 +94,8 @@ void SPHSolver::computeDensityAndPressure(
     };
 
 
-    applyBoundaryDensity(internalRigidParticles);
-    applyBoundaryDensity(ghostParticles);
+    applyBoundaryDensity(internalRigidParticles, true);
+    applyBoundaryDensity(ghostParticles, false);
     //threadPool_->waitFinished();
 
     threadPool_->parallel_for(0, fluidParticles.size(), [&](size_t start, size_t end) {
@@ -267,7 +268,7 @@ void SPHSolver::computeDerivatives(
                     Vector2D r_ij = p_i->pos - bp->pos;
                     double r2 = r_ij.normSq();
                     double h_i  = p_i->h;
-                    double h_j  = bp->h;
+                    double h_j  = bp->h > 0.0 ? bp->h : h_i;
                     double h_ij = 0.5 * (h_i + h_j);
                     Vector2D gradW_ij = 0.5 * (kernel.gradient(r_ij, h_i) + kernel.gradient(r_ij, h_j));
 
@@ -279,9 +280,10 @@ void SPHSolver::computeDerivatives(
                     double c_i   = eos_->computeSoundSpeed(rho_i, u_i);
 
                     Vector2D v_ij = p_i->vel - bp->vel;
-                    double rho_j = rho_i; 
-                    double P_j   = P_i; 
-                    double u_j   = bp->u;  
+                    // Ghosts are mirror images and carry the source state; rigid particles take the local gas state
+                    double rho_j = isRigid ? rho_i : std::max(bp->density, 1e-5);
+                    double u_j   = isRigid ? u_i : bp->u;
+                    double P_j   = isRigid ? P_i : eos_->computePressure(rho_j, u_j);
 
                     double pi_ij = 0.0;
                     double v_dot_r = v_ij.dot(r_ij);
@@ -293,13 +295,14 @@ void SPHSolver::computeDerivatives(
                     }
 
                     double p_term = ((P_i + P_j) / (rho_i * rho_j)) + pi_ij;
-                    Vector2D force = gradW_ij * (p_i->mass * bp->mass * p_term);
+                    const double bMass = isRigid ? p_i->mass : bp->mass;
+                    Vector2D force = gradW_ij * (p_i->mass * bMass * p_term);
                     Vector2D force_on_fluid = -force;
 
                     // Thermal conduction with boundary
                     double rho_ij = 0.5 * (rho_i + rho_j);
                     double v_u_ij = std::sqrt(std::abs(P_i - P_j) / rho_ij);
-                    double alpha_u = 0.5;
+                    double alpha_u = params_.thermal;
                     double cond_term = (alpha_u * v_u_ij / rho_ij) * (u_i - u_j) * 
                                        (r_ij.dot(gradW_ij) / (r2 + 0.01 * h_ij * h_ij));
                     
@@ -310,7 +313,7 @@ void SPHSolver::computeDerivatives(
                     ay_i.fetch_add(force_on_fluid.y / p_i->mass, std::memory_order_relaxed);
 
                     double thermal_work = 0.5 * p_term * v_ij.dot(gradW_ij);
-                    du_i.fetch_add(bp->mass * (thermal_work + cond_term), std::memory_order_relaxed);
+                    du_i.fetch_add(bMass * (thermal_work + cond_term), std::memory_order_relaxed);
 
                     if (isRigid && bp->parentBody) {
                         bp->parentBody->addForceAtPosition(force, bp->pos);

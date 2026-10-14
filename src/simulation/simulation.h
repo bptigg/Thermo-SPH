@@ -11,6 +11,7 @@
 #include "VelocityVerlet.h"
 #include "ThreadPool.h"
 #include "initialconditions.h"
+#include "thermalbath.h"
 
 class SimulationEngine {
 public:
@@ -27,6 +28,8 @@ public:
         // Optional Gravity Parameters
         bool enableGravity = false;
         Vector2D gravity = Vector2D(0.0, -9.81);
+
+        ThermalBath bath;
     };
 
     SimulationEngine(
@@ -43,16 +46,25 @@ public:
 
     double getCurrentTime() const { return currentTime_; }
     size_t getCurrentStep() const { return currentStep_; }
+    // Cumulative heat the bath has put into the gas (negative = removed)
+    double getBathHeat() const { return bathHeat_; }
+    double getCurrentActiveU() const { return config_.bath.getCurrentActiveU(); }
     
     const std::vector<std::shared_ptr<Particle>>& getParticles() const { return fluidParticles_; }
     const std::vector<std::shared_ptr<Particle>>& getFluidParticles() const { return fluidParticles_; }
     const std::vector<std::shared_ptr<RigidObject>>& getRigidObjects() const { return rigidObjects_; }
 
+
     ThreadPool& getThreadPool() { return threadPool_; } 
+
+    const SpatialGrid& getSpatialGrid() const { return grid_; }
+    SpatialGrid& getSpatialGrid() { return grid_; }
+    const ThermalBath& getThermalBath() const { return config_.bath; }
+    ThermalBath& getThermalBath() { return config_.bath; }
 
 private:
     void classifyRigidBodies();
-    void collectInternalRigidParticles(std::vector<std::shared_ptr<Particle>>& outParticles);
+    void collectInternalRigidParticles(std::vector<std::shared_ptr<Particle>>& outParticles, const SpatialGrid& grid);
 
     Configuration config_;
     SPHSolver solver_;
@@ -68,6 +80,7 @@ private:
     std::vector<std::shared_ptr<Particle>> ghosts_;
 
     double currentTime_ = 0.0;
+    double bathHeat_ = 0.0;
     double dt_ = 1e-4;
     size_t currentStep_ = 0;
 };

@@ -223,4 +223,44 @@ public:
         std::vector<std::shared_ptr<RigidObject>> emptyRigidObjects;
         return exportFrameCSV(frameIndex, particles, emptyRigidObjects);
     }
+
+    template <typename SpatialGridType>
+    bool exportActiveGridCSV(size_t frameIndex, const SpatialGridType& grid) const {
+        if (frameOutputDir_.empty()) return false;
+
+        fs::create_directories(frameOutputDir_);
+
+        std::ostringstream filename;
+        filename << frameOutputDir_ << "/grid_" 
+                 << std::setfill('0') << std::setw(5) << frameIndex << ".csv";
+
+        std::ofstream file(filename.str());
+        if (!file.is_open()) return false;
+
+        file << "cell_x,cell_y\n";
+        for (int64_t key : grid.getActiveCells()) {
+            int cx, cy;
+            SpatialGridType::decodeCell(key, cx, cy);
+            file << cx << "," << cy << "\n";
+        }
+        return true;
+    }
+
+    template <typename ThermalBath>
+    bool exportBathFrameCSV(size_t frameIndex, double time, const ThermalBath& bath) const {
+        if (frameOutputDir_.empty()) return false;
+        
+        fs::create_directories(frameOutputDir_);
+
+        std::ostringstream filename;
+        filename << frameOutputDir_ << "/bath_" 
+                 << std::setfill('0') << std::setw(5) << frameIndex << ".csv";
+
+        std::ofstream file(filename.str());
+        if (!file.is_open()) return false;
+
+        file << "time,active_u,is_active\n"
+             << time << "," << bath.getCurrentActiveU() << "," << (bath.isActiveBath() ? 1 : 0) << "\n";
+        return true;
+    }
 };

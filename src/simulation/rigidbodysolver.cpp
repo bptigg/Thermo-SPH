@@ -142,6 +142,10 @@ bool RigidBodySolver::solveCollisions(std::vector<std::shared_ptr<RigidObject>>&
                 if (bodyCache[endpoint.bodyIdx].isStatic && bodyCache[activeIdx].isStatic) {
                     continue;
                 }
+                if (!bodies[endpoint.bodyIdx]->participatesInCollisions() ||
+                    !bodies[activeIdx]->participatesInCollisions()) {
+                    continue;
+                }
 
                 // Check 2D AABB overlap
                 if (bodyCache[endpoint.bodyIdx].sweptAABB.overlaps(bodyCache[activeIdx].sweptAABB)) {

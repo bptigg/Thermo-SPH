@@ -13,6 +13,8 @@ public:
 
     virtual std::vector<std::shared_ptr<Particle>> generateParticles() = 0;
     virtual std::vector<std::shared_ptr<RigidObject>> getRigidObjects() { return {}; }
+
+    virtual std::function<double()> getThermalStateProvider() const { return nullptr; }
 };
 
 class CustomIC : public InitialConditions {
